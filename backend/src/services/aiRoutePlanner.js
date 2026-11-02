@@ -94,7 +94,7 @@ async function generateWithRetry(ai, request) {
   );
 }
 
-export async function interpretRoutePrompt(prompt) {
+export async function interpretRoutePrompt(prompt, fixedRoute = null) {
   if (!process.env.GEMINI_API_KEY) {
     throw new HttpError(503, 'La planificación con IA no está configurada. Configure GEMINI_API_KEY.');
   }
@@ -103,12 +103,17 @@ export async function interpretRoutePrompt(prompt) {
   const response = await generateWithRetry(ai, {
     model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     contents: [
-      'Interpretá la solicitud de viaje y devolvé únicamente los campos del esquema JSON.',
+      'Interpretá las preferencias del recorrido y devolvé únicamente los campos del esquema JSON.',
       'No inventes ubicaciones ni agregues paradas que el usuario no haya pedido.',
       'Si el origen o destino no están claros, explicitalo en userNotes usando el texto disponible; no adivines.',
       'preferPavedRoads expresa una preferencia que luego debe verificarse con fuentes viales, no una capacidad que Google Routes garantice.',
+      ...(fixedRoute ? [
+        'El usuario ya definió el recorrido con campos estructurados. El origen, destino y paradas son datos confirmados y no deben cambiarse.',
+        `Recorrido obligatorio y en este orden: ${[fixedRoute.origin, ...fixedRoute.waypoints, fixedRoute.destination].join(' → ')}.`,
+        'No agregues, elimines ni reordenes ninguna ubicación. Interpretá solamente preferencias como peajes, autopistas y pavimentación.',
+      ] : []),
       `Solicitud del usuario: ${prompt}`,
-    ].join('\n\n'),
+    ].join('\\n\\n'),
     config: {
       responseMimeType: 'application/json',
       responseSchema: {
@@ -142,5 +147,17 @@ export async function interpretRoutePrompt(prompt) {
   if (result.data.origin.toLowerCase() === result.data.destination.toLowerCase()) {
     throw new HttpError(422, 'El origen y el destino no pueden ser iguales.');
   }
+  if (fixedRoute) {
+    // Las ubicaciones provienen del formulario y prevalecen sobre cualquier texto generado por IA.
+    // Al haber paradas manuales, se conserva el orden exacto ingresado por el usuario.
+    return {
+      ...result.data,
+      origin: fixedRoute.origin,
+      destination: fixedRoute.destination,
+      waypoints: fixedRoute.waypoints,
+      optimizeWaypointOrder: false,
+    };
+  }
+
   return result.data;
 }
