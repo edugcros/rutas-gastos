@@ -10,7 +10,8 @@ function normalizeRouteApiUrl(value) {
       ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
     if (parsed.protocol !== 'https:' && !isLocalHttp) return '';
 
-    const path = parsed.pathname.replace(/\\/+$/, '');
+    let path = parsed.pathname;
+    while (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
     parsed.pathname = !path || path === '/'
       ? '/api'
       : path.endsWith('/api')
@@ -18,7 +19,8 @@ function normalizeRouteApiUrl(value) {
         : `${path}/api`;
     parsed.search = '';
     parsed.hash = '';
-    return parsed.toString().replace(/\\/$/, '');
+    const normalized = parsed.toString();
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
   } catch {
     return '';
   }
