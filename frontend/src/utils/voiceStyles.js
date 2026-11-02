@@ -110,13 +110,16 @@ export function voiceGender(voice) {
 const langOf = (voice) => String(voice?.lang || '').replace('_', '-').toLowerCase();
 const PRIORITY = (voice) => (voice.localService ? 0 : 1);
 
+// Las voces neuronales ("Natural" / "Online") suenan mucho más humanas que las clásicas.
+const isNeural = (voice) => /natural|neural|online/i.test(String(voice?.name || ''));
+
 function firstBy(voices, predicate) {
-  return voices.filter(predicate).sort((a, b) => PRIORITY(a) - PRIORITY(b) || String(a.name).localeCompare(String(b.name)))[0] || null;
+  return voices.filter(predicate).sort((a, b) => Number(isNeural(b)) - Number(isNeural(a)) || PRIORITY(a) - PRIORITY(b) || String(a.name).localeCompare(String(b.name)))[0] || null;
 }
 
 export const VOICE_STYLES = [
   { id: 'standard', label: 'Estándar (voz del sistema)', description: 'Voz en español del dispositivo.', rate: 1, pitch: 1, volume: 1, pause: false },
-  { id: 'colombiana', label: 'Colombiana (Medellín) · femenina, cálida y sensual', description: 'Acento paisa: melodiosa, pausada y envolvente.', rate: 0.9, pitch: 0.98, volume: 1, pause: true },
+  { id: 'colombiana', label: 'Colombiana (Medellín) · joven, suave y natural', description: 'Voz femenina de unos 21 años: dulce, fluida y cercana, con acento paisa.', rate: 0.95, pitch: 1.12, volume: 0.9, pause: false },
   { id: 'rusa', label: 'Rusa · grave y sensual', description: 'Acento ruso al hablar español, lento y envolvente.', rate: 0.85, pitch: 0.82, volume: 0.95, pause: true },
 ];
 
@@ -146,7 +149,6 @@ export function pickVoiceForStyle(styleId, voices = []) {
 export function styleText(styleId, text) {
   const base = String(text ?? '');
   if (styleId === 'rusa') return spanishToCyrillic(base).replace(/\.\s/g, '... ');
-  if (styleId === 'colombiana') return base.replace(/\.\s/g, '... ');
   return base;
 }
 
@@ -191,7 +193,7 @@ export function splitPhrases(text) {
  * cantada), y el último de cada frase baja y se alarga, como cierra una paisa.
  * Las preguntas cierran subiendo.
  */
-const RISES = [0.07, 0.03, 0.09, 0.04];
+const RISES = [0.04, 0.02, 0.05, 0.03];
 
 export function melodicParts(text, { pitch = 1, rate = 1 } = {}) {
   const parts = [];
@@ -200,9 +202,9 @@ export function melodicParts(text, { pitch = 1, rate = 1 } = {}) {
       const last = position === phrases.length - 1;
       const question = /\?$/.test(phrase);
       parts.push({
-        text: last && !question ? phrase.replace(/\.$/, '...') : phrase,
-        pitch: Math.min(2, Math.max(0.1, last ? (question ? pitch + 0.08 : pitch - 0.07) : pitch + RISES[position % RISES.length])),
-        rateFactor: last ? 0.92 : 1.02,
+        text: phrase,
+        pitch: Math.min(2, Math.max(0.1, last ? (question ? pitch + 0.05 : pitch - 0.04) : pitch + RISES[position % RISES.length])),
+        rateFactor: last ? 0.96 : 1,
       });
     });
   });
@@ -224,4 +226,4 @@ export function styleParts(styleId, text, voice = null) {
   return [{ text: styleText(styleId, text), pitch: style.pitch, rateFactor: 1 }];
 }
 
-export const STYLE_PREVIEW = 'Hola, mi vida, soy tu guía. Seguí conmigo por la ruta, con calma, que nos vamos despacito mientras te zobo el chorizo papasitoo, hasta llegar a destino.';
+export const STYLE_PREVIEW = 'Hola, soy tu guía. Vení conmigo, con calma, que yo te llevo por la ruta hasta llegar a destino.';

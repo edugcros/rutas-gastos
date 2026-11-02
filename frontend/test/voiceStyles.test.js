@@ -70,9 +70,9 @@ test('Russian style needs a Russian voice and prefers a female one', () => {
   assert.equal(pickVoiceForStyle('rusa', [voice('Helena', 'es-ES')]).match, 'none');
 });
 
-test('style text: Russian is Cyrillic, Colombian adds pauses, standard is untouched', () => {
+test('style text: Russian is Cyrillic, Colombian and standard are untouched', () => {
   assert.equal(styleText('standard', 'Paso 1. Gira.'), 'Paso 1. Gira.');
-  assert.equal(styleText('colombiana', 'Paso uno. Gira.'), 'Paso uno... Gira.');
+  assert.equal(styleText('colombiana', 'Paso uno. Gira.'), 'Paso uno. Gira.', 'no artificial pauses');
   assert.match(styleText('rusa', 'Gira a la derecha. Sigue.'), /^хира а ла дэрэча\.\.\. хигэ\.?|^[а-яё .]+$/);
   assert.ok(!/[a-z]/i.test(styleText('rusa', 'Ruta Nacional 151.')), 'nothing is left in Latin letters or digits');
 });
@@ -81,7 +81,9 @@ test('styles define slower, softer delivery than standard', () => {
   const [standard, colombiana, rusa] = VOICE_STYLES;
   assert.equal(standard.rate, 1);
   assert.ok(colombiana.rate < 1 && rusa.rate < 1);
-  assert.ok(colombiana.pitch < 1 && rusa.pitch < colombiana.pitch);
+  assert.ok(colombiana.pitch > 1, 'a young voice sits above the neutral pitch');
+  assert.ok(colombiana.volume < 1, 'softer');
+  assert.ok(rusa.pitch < colombiana.pitch);
 });
 
 // ---------- Estilo Medellín ----------
@@ -114,7 +116,8 @@ test('melodic contour rises on continuing phrases and falls and slows on closing
   assert.ok(parts[1].pitch < 1, 'closing phrase falls');
   assert.ok(parts[1].rateFactor < parts[0].rateFactor, 'closing phrase slows down');
   assert.ok(parts[2].pitch > 1, 'questions close rising');
-  assert.ok(parts[1].text.endsWith('...'), 'closing phrase gets a longer pause');
+  assert.ok(parts.every((part) => !part.text.includes('...')), 'no theatrical ellipses');
+  assert.ok(parts.every((part) => Math.abs(part.pitch - 1) <= 0.07), 'contour stays subtle to sound natural');
   assert.ok(parts.every((part) => part.pitch >= 0.1 && part.pitch <= 2));
 });
 
@@ -126,4 +129,10 @@ test('Colombian style applies seseo only to Spain voices and always voseo', () =
   const standard = styleParts('standard', 'Gira hacia Mendoza.', spain);
   assert.equal(standard.length, 1);
   assert.equal(standard[0].text, 'Gira hacia Mendoza.');
+});
+
+test('neural (Natural/Online) Colombian voices are preferred over classic ones', () => {
+  const classic = { name: 'Microsoft Sabina - Spanish (Colombia)', lang: 'es-CO', localService: true, voiceURI: 'a' };
+  const neural = { name: 'Microsoft Salome Online (Natural) - Spanish (Colombia)', lang: 'es-CO', localService: false, voiceURI: 'b' };
+  assert.equal(pickVoiceForStyle('colombiana', [classic, neural]).voice, neural);
 });
