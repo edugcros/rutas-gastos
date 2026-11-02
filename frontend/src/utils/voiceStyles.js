@@ -224,4 +224,4 @@ export function styleParts(styleId, text, voice = null) {
   return [{ text: styleText(styleId, text), pitch: style.pitch, rateFactor: 1 }];
 }
 
-export const STYLE_PREVIEW = 'Hola, mi vida, soy tu guía. Seguí conmigo por la ruta, con calma, que nos vamos despacito hasta llegar a destino.';
+export const STYLE_PREVIEW = 'Hola, mi vida, soy tu guía. Seguí conmigo por la ruta, con calma, que nos vamos despacito mientras te zobo el chorizo papasitoo, hasta llegar a destino.';
