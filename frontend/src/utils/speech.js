@@ -46,7 +46,7 @@ export function buildSpeechScript(model) {
 
   const c = model.condition;
   if (c) {
-    add('condition', 'Estado del camino', `Estado del camino. Análisis orientativo de inteligencia artificial${c.asOf ? `, ${speakable(c.asOf)}` : ''}. ${sentence(c.unpaved)} ${c.summary ? sentence(c.summary) : ''}`);
+    add('condition', 'Estado del camino', `Estado del camino. Análisis orientativo de inteligencia artificial${c.asOf ? `, ${speakable(c.asOf)}` : ''}. ${sentence(c.unpaved)} ${c.summary ? sentence(c.summary) : ''}${c.liveData ? '' : ' Atención: no se pudo consultar información en vivo, por lo que los cortes y obras no fueron verificados.'}`);
     c.avoidWarnings.forEach((warning) => add('warning', 'Atención', `Atención. ${sentence(warning)}`));
     c.closures.forEach((closure) => add('closure', `${closure.status}: ${closure.road}`, `${closure.status} en ${speakable(closure.road)}. ${sentence(closure.description)}${closure.asOf ? ` Información de ${speakable(closure.asOf)}.` : ''}`));
     const surfaces = c.segments.filter((segment) => segment.surface !== 'Sin datos');

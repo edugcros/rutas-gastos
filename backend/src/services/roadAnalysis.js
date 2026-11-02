@@ -13,7 +13,8 @@ import { z } from 'zod';
  */
 
 const MAX_ROUTES = 3;
-const ANALYSIS_TIMEOUT_MS = 28_000;
+const WEB_TIMEOUT_MS = 20_000;
+const KNOWLEDGE_TIMEOUT_MS = 12_000;
 
 const segmentSchema = z.object({
   road: z.string().trim().min(1).max(120),
@@ -90,12 +91,14 @@ function compactRoute(route, index) {
   };
 }
 
-export function buildAnalysisPrompt({ intent, userPrompt, routes, now = new Date() }) {
+export function buildAnalysisPrompt({ intent, userPrompt, routes, now = new Date(), webSearch = true }) {
   const stops = [intent.origin, ...(intent.waypoints || []), intent.destination].join(' -> ');
   return [
     'Sos un analista de rutas viales de Argentina. Evaluá el estado y el tipo de camino de las alternativas calculadas.',
     `Fecha de hoy: ${now.toISOString().slice(0, 10)}.`,
-    'Usá la búsqueda web para consultar información vigente (Vialidad Nacional y provinciales, estado de rutas, cortes, obras, nevadas, crecidas, alertas) y el conocimiento sobre qué rutas son de asfalto, ripio o tierra.',
+    webSearch
+      ? 'Usá la búsqueda web para consultar información vigente (Vialidad Nacional y provinciales, estado de rutas, cortes, obras, nevadas, crecidas, alertas) y el conocimiento sobre qué rutas son de asfalto, ripio o tierra.'
+      : 'No tenés acceso a información en vivo. Basate solo en tu conocimiento general sobre qué rutas son de asfalto, ripio o tierra. NO afirmes ni inventes cortes, obras ni alertas vigentes: devolvé closures vacío y aclará en el resumen que no se pudo verificar el estado actual.',
     'REGLAS: no inventes. Si no hay evidencia suficiente para una ruta o tramo, devolvé surface "UNKNOWN" y confidence "LOW". Indicá "asOf" (fecha o período de la información) en cada corte. Si no encontraste cortes u obras vigentes, devolvé closures vacío; no afirmes que el camino está libre.',
     'Los caminos de tierra o ripio no son un error: si el usuario los acepta o los pide, describilos con su estado probable y recomendaciones (vehículo, clima, combustible, señal). Si pidió pavimento y la ruta tiene tramos sin asfaltar, advertilo.',
     `Recorrido: ${stops}.`,
@@ -149,28 +152,44 @@ function withTimeout(promise, ms) {
 }
 
 /**
- * @returns {Promise<null | {routes: object[], sources: object[], generatedAt: string, grounded: boolean}>}
+ * Un intento de análisis. Con búsqueda web aporta datos vigentes; sin ella solo
+ * conocimiento general, por lo que los cortes (que exigen datos en vivo) se descartan.
+ */
+async function attempt({ client, model, intent, userPrompt, routes, now, webSearch, timeoutMs }) {
+  const response = await withTimeout(client.models.generateContent({
+    model,
+    contents: buildAnalysisPrompt({ intent, userPrompt, routes, now, webSearch }),
+    config: { ...(webSearch ? { tools: [{ googleSearch: {} }] } : {}), temperature: 0.2 },
+  }), timeoutMs);
+  const parsed = parseAnalysisText(response.text);
+  if (!parsed) throw new Error('ANALYSIS_UNPARSEABLE');
+  const sources = webSearch ? extractSources(response) : [];
+  return {
+    routes: webSearch ? parsed.routes : parsed.routes.map((entry) => ({ ...entry, closures: [] })),
+    sources,
+    generatedAt: now.toISOString(),
+    grounded: webSearch && sources.length > 0,
+    mode: webSearch ? 'web' : 'knowledge',
+  };
+}
+
+/**
+ * @returns {Promise<null | {routes: object[], sources: object[], generatedAt: string, grounded: boolean, mode: 'web'|'knowledge'}>}
  */
 export async function analyzeRoutes({ intent, userPrompt, routes, ai, model, now = new Date() }) {
-  try {
-    const client = ai || (process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null);
-    if (!client || !routes?.length) return null;
-    const response = await withTimeout(client.models.generateContent({
-      model: model || process.env.GEMINI_ANALYSIS_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
-      contents: buildAnalysisPrompt({ intent, userPrompt, routes, now }),
-      config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
-    }), ANALYSIS_TIMEOUT_MS);
+  const client = ai || (process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null);
+  if (!client || !routes?.length) return null;
+  const chosenModel = model || process.env.GEMINI_ANALYSIS_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  const base = { client, model: chosenModel, intent, userPrompt, routes, now };
 
-    const parsed = parseAnalysisText(response.text);
-    if (!parsed) {
-      console.warn('[ROAD_ANALYSIS] respuesta no interpretable');
-      return null;
+  // La búsqueda web puede no estar disponible (cuota o plan): se degrada a conocimiento general.
+  // El análisis es un complemento: nunca debe impedir que el usuario reciba su ruta.
+  for (const [webSearch, timeoutMs] of [[true, WEB_TIMEOUT_MS], [false, KNOWLEDGE_TIMEOUT_MS]]) {
+    try {
+      return await attempt({ ...base, webSearch, timeoutMs });
+    } catch (error) {
+      console.warn('[ROAD_ANALYSIS_FAILED]', JSON.stringify({ webSearch, name: error?.name || 'Error', status: error?.status ?? null, message: String(error?.message || '').slice(0, 120) }));
     }
-    const sources = extractSources(response);
-    return { routes: parsed.routes, sources, generatedAt: now.toISOString(), grounded: sources.length > 0 };
-  } catch (error) {
-    // El análisis es un complemento: nunca debe impedir que el usuario reciba su ruta.
-    console.warn('[ROAD_ANALYSIS_FAILED]', { name: error?.name || 'Error', message: String(error?.message || '').slice(0, 160) });
-    return null;
   }
+  return null;
 }

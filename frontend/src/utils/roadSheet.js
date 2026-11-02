@@ -59,6 +59,7 @@ export function buildRoadSheetModel(trip, route, { now = new Date(), analysis = 
       avoidWarnings: analysis.avoidWarnings,
       sources: analysis.sources,
       asOf: formatGeneratedAt(analysis.generatedAt),
+      liveData: analysis.mode !== 'knowledge',
     } : null,
     legs,
     totalSteps: legs.reduce((sum, leg) => sum + leg.instructions.length, 0),
@@ -173,7 +174,7 @@ export async function downloadRoadSheet(trip, route, options = {}) {
   if (model.condition) {
     const c = model.condition;
     write('Estado del camino', { size: 12, style: 'bold', gap: 1 });
-    write(`Análisis orientativo con IA${c.asOf ? ` (${c.asOf})` : ''}. ${c.unpaved}.`, { size: 9, color: COLORS.muted, gap: 2.5 });
+    write(`Análisis orientativo con IA${c.asOf ? ` (${c.asOf})` : ''}. ${c.unpaved}.${c.liveData ? '' : ' Sin datos en vivo: cortes y obras NO verificados.'}`, { size: 9, color: COLORS.muted, gap: 2.5 });
     if (c.summary) write(c.summary, { size: 10, gap: 3 });
     c.avoidWarnings.forEach((item) => write(`ATENCIÓN: ${item}`, { size: 10, style: 'bold', color: [180, 35, 24], gap: 2 }));
     c.closures.forEach((closure) => write(`${closure.status.toUpperCase()} - ${closure.road}: ${closure.description}${closure.asOf ? ` (${closure.asOf})` : ''}`, { size: 9.5, style: 'bold', color: [181, 71, 8], x: margin + 2, width: contentWidth - 4, gap: 1.6 }));

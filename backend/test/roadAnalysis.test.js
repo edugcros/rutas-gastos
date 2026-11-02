@@ -91,6 +91,22 @@ test('analyzeRoutes returns the analysis with sources when the model answers', a
   assert.equal(result.routes[0].closures[0].status, 'WORKS');
 });
 
+test('analyzeRoutes falls back to general knowledge when web search is unavailable, dropping unverifiable closures', async () => {
+  const calls = [];
+  const ai = { models: { generateContent: async (request) => {
+    calls.push(Boolean(request.config.tools));
+    if (request.config.tools) { const error = new Error('quota'); error.status = 429; throw error; }
+    assert.match(request.contents, /No tenés acceso a información en vivo/);
+    return { text: JSON.stringify(validJson) };
+  } } };
+  const result = await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 'test' });
+  assert.deepEqual(calls, [true, false]);
+  assert.equal(result.mode, 'knowledge');
+  assert.equal(result.grounded, false);
+  assert.deepEqual(result.routes[0].closures, [], 'closures need live data and must not be kept');
+  assert.equal(result.routes[0].segments[0].road, 'RN151');
+});
+
 test('analyzeRoutes never throws: provider errors and bad output yield null', async () => {
   const failing = { models: { generateContent: async () => { throw new Error('boom'); } } };
   const garbage = { models: { generateContent: async () => ({ text: 'lo siento' }) } };
