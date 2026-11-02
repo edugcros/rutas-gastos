@@ -141,7 +141,7 @@ Crear `backend/.env.routes` copiando `backend/.env.routes.example` y completar. 
 NODE_ENV=production
 PORT=5100
 GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-3.8-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 GOOGLE_MAPS_API_KEY=...
 APP_ORIGINS=https://TU-DOMINIO-PWA
 TRUST_PROXY_HOPS=1
