@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  AppBar,
   Avatar,
   Box,
   Button,
   ButtonBase,
   Card,
-  CardContent,
   Chip,
   CircularProgress,
   Dialog,
@@ -16,116 +14,97 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   MenuItem,
-  Paper,
-  Stack,
   TextField,
-  Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material';
 import {
-  ArrowUpRight, CalendarDays, ChevronRight, Compass, Download, HardDrive,
-  MapPin, Plus, Route as RouteIcon, Trash2, Upload, Wallet, Wifi, WifiOff,
+  CalendarClock, ChevronRight, Compass, Download, HardDrive, Map as MapIcon,
+  Plus, Route as RouteIcon, Trash2, Upload, Wallet, Wifi, WifiOff, X,
 } from 'lucide-react';
 import AuthScreen from './components/AuthScreen.jsx';
 import TripWorkspace from './components/TripWorkspace.jsx';
+import { EmptyState, PageHeader, Section, Stack, Stat, StatusChip } from './components/ui.jsx';
 import http from './api/http.js';
 import { buildLocalBackup, clearLocalProfile, createLocalUser, getLocalProfile, restoreLocalBackup } from './data/localStore.js';
+import { tokens } from './theme.js';
 import { money } from './utils.js';
 
 const EMPTY_TRIP = { name: '', origin: '', destination: '', waypoints: [], startDate: '', incomeAmount: '0', incomeCurrency: 'ARS' };
+const SIDEBAR_WIDTH = 248;
 
-const statusMeta = {
-  PLANNED: { label: 'Planificado', color: 'info' },
-  IN_PROGRESS: { label: 'En curso', color: 'warning' },
-  COMPLETED: { label: 'Completado', color: 'success' },
-  CANCELLED: { label: 'Cancelado', color: 'error' },
-};
-
-const mobileNavItemSx = {
-  flex: 1,
-  minWidth: 0,
-  minHeight: 58,
-  px: 0.5,
-  py: 0.75,
-  flexDirection: 'column',
-  justifyContent: 'center',
-  gap: 0.35,
-  color: 'rgba(232,236,255,.78)',
-  borderRadius: 2.5,
-  '& .MuiListItemIcon-root': {
-    minWidth: 0,
-    color: 'inherit',
-    mb: 0,
-    justifyContent: 'center',
-  },
-  '& .MuiListItemText-root': { m: 0 },
-  '& .MuiListItemText-primary': {
-    color: 'inherit',
-    fontSize: 11,
-    fontWeight: 750,
-    lineHeight: 1.15,
-    textAlign: 'center',
-    whiteSpace: 'nowrap',
-  },
-  '&.Mui-selected': {
-    color: '#fff',
-    bgcolor: 'rgba(255,255,255,.16)',
-  },
-  '&.Mui-selected:hover': { bgcolor: 'rgba(255,255,255,.20)' },
-};
-
-function MetricCard({ label, value, icon: Icon, gradient, hint }) {
+/** Ítem de navegación de la barra lateral (escritorio). */
+function NavItem({ icon: Icon, label, selected = false, onClick, compact = false }) {
   return (
-    <Card
-      sx={{
-        minWidth: 0,
-        minHeight: 132,
-        color: '#fff',
-        overflow: 'hidden',
-        position: 'relative',
-        border: '1px solid rgba(255,255,255,.42)',
-        background: gradient,
-        boxShadow: '0 13px 27px rgba(54, 65, 142, .13)',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          width: 138,
-          height: 138,
-          right: -43,
-          top: -48,
-          borderRadius: '50%',
-          border: '1px solid rgba(255,255,255,.18)',
-          boxShadow: '0 0 0 18px rgba(255,255,255,.045), 0 0 0 38px rgba(255,255,255,.03)',
-        },
-      }}
-    >
-      <CardContent sx={{ position: 'relative', zIndex: 1, p: 2.2, '&:last-child': { pb: 2.2 } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: 'rgba(255,255,255,.82)', fontSize: 12.5, fontWeight: 750 }}>{label}</Typography>
-            <Typography sx={{ mt: 1.1, color: '#fff', fontSize: { xs: 19, sm: 22 }, lineHeight: 1.2, fontWeight: 900, letterSpacing: '-.035em', overflowWrap: 'anywhere' }}>
-              {value}
-            </Typography>
-            {hint && <Typography sx={{ mt: .7, color: 'rgba(255,255,255,.74)', fontSize: 11 }}>{hint}</Typography>}
-          </Box>
-          <Box sx={{ width: 39, height: 39, flexShrink: 0, display: 'grid', placeItems: 'center', border: '1px solid rgba(255,255,255,.24)', borderRadius: 2.5, bgcolor: 'rgba(255,255,255,.15)', backdropFilter: 'blur(8px)' }}>
-            <Icon size={19} />
-          </Box>
-        </Stack>
-      </CardContent>
-    </Card>
+    <Tooltip title={compact ? label : ''} placement="right">
+      <ButtonBase
+        onClick={onClick}
+        aria-current={selected ? 'page' : undefined}
+        sx={{
+          width: '100%', justifyContent: compact ? 'center' : 'flex-start', gap: 1.5, px: compact ? 0 : 1.5, height: 40,
+          borderRadius: 2, color: selected ? tokens.navTextActive : tokens.navText, bgcolor: selected ? 'rgba(255,255,255,.10)' : 'transparent',
+          fontSize: 14, fontWeight: 500, textAlign: 'left', transition: 'background-color .15s, color .15s',
+          '&:hover': { bgcolor: 'rgba(255,255,255,.07)', color: tokens.navTextActive },
+        }}
+      >
+        <Icon size={18} />
+        {!compact && <span>{label}</span>}
+      </ButtonBase>
+    </Tooltip>
   );
 }
 
-function TripStatus({ status }) {
-  const meta = statusMeta[status] || { label: status, color: 'default' };
-  return <Chip size="small" label={meta.label} color={meta.color} variant="filled" sx={{ fontSize: 12, height: 25 }} />;
+/** Ítem de la barra inferior (móvil). */
+function MobileNavItem({ icon: Icon, label, selected = false, onClick }) {
+  return (
+    <ButtonBase
+      onClick={onClick}
+      aria-label={label}
+      aria-current={selected ? 'page' : undefined}
+      sx={{ flex: 1, minHeight: 56, flexDirection: 'column', gap: 0.5, borderRadius: 2, color: selected ? '#fff' : tokens.navText, fontSize: 12, fontWeight: 500, bgcolor: selected ? 'rgba(255,255,255,.10)' : 'transparent' }}
+    >
+      <Icon size={20} />
+      <span>{label}</span>
+    </ButtonBase>
+  );
+}
+
+/** Fila de viaje en el listado. */
+function TripRow({ trip, summary, onOpen, onDelete, deleting }) {
+  const stops = [trip.origin, ...(trip.waypoints || []), trip.destination];
+  const profit = summary.availableProfit;
+  return (
+    <Stack direction="row" alignItems="center" sx={{ position: 'relative', '&:not(:last-of-type)': { borderBottom: `1px solid ${tokens.line}` }, '&:hover': { bgcolor: tokens.surfaceMuted } }}>
+      <ButtonBase
+        onClick={onOpen}
+        sx={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr) auto', md: 'minmax(0,1.6fr) auto 160px' }, alignItems: 'center', columnGap: 2, rowGap: 0.75, px: { xs: 2, sm: 3 }, py: 2, textAlign: 'left', borderRadius: 0 }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography noWrap sx={{ fontWeight: 600, fontSize: '1rem' }}>{trip.name}</Typography>
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: 0.5, color: 'text.secondary', minWidth: 0 }}>
+            <MapIcon size={14} style={{ flexShrink: 0 }} />
+            <Typography noWrap variant="body2" title={stops.join(' → ')} sx={{ color: 'inherit' }}>{stops.join(' → ')}</Typography>
+          </Stack>
+          {(trip.waypoints || []).length > 0 && (
+            <Typography variant="caption" color="textSecondary">{trip.waypoints.length} {trip.waypoints.length === 1 ? 'parada intermedia' : 'paradas intermedias'}</Typography>
+          )}
+        </Box>
+        <Box sx={{ justifySelf: { xs: 'end', md: 'start' }, gridRow: { xs: 1, md: 'auto' }, gridColumn: { xs: 2, md: 'auto' } }}><StatusChip status={trip.status} /></Box>
+        <Box sx={{ textAlign: { xs: 'left', md: 'right' }, gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+          <Typography variant="caption" color="textSecondary" sx={{ mr: { xs: 1, md: 0 }, display: { xs: 'inline', md: 'block' } }}>Disponible</Typography>
+          <Typography className="tabular" component="span" sx={{ fontWeight: 700, fontSize: '1.0625rem', color: profit < 0 ? 'error.main' : 'success.main' }}>{money(profit, summary.currency)}</Typography>
+        </Box>
+      </ButtonBase>
+      <Tooltip title="Eliminar viaje">
+        <span>
+          <IconButton disabled={deleting} onClick={onDelete} aria-label={`Eliminar viaje ${trip.name}`} sx={{ mr: { xs: 1, sm: 2 }, '&:hover': { color: 'error.main', bgcolor: tokens.negativeSoft } }}>
+            <Trash2 size={17} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Stack>
+  );
 }
 
 export default function App() {
@@ -393,381 +372,208 @@ export default function App() {
 
   if (!profileReady) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', gap: 1, alignContent: 'center' }}>
-        <CircularProgress size={32} />
-        <Typography color="text.secondary" sx={{ fontSize: 12 }}>Preparando almacenamiento local...</Typography>
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1.5 }} role="status">
+        <CircularProgress size={28} />
+        <Typography color="textSecondary">Preparando almacenamiento local…</Typography>
       </Box>
     );
   }
 
   if (!user) return <AuthScreen onAuthenticated={setUser} />;
   const selected = trips.find((item) => item.trip._id === selectedTripId);
+  const profitIn = (currency) => trips.reduce((sum, item) => sum + (item.financialSummary?.currency === currency ? (item.financialSummary?.availableProfit || 0) : 0), 0);
+  const inProgress = trips.filter((item) => item.trip.status === 'IN_PROGRESS').length;
+  const planned = trips.filter((item) => item.trip.status === 'PLANNED').length;
+  const initial = user.name?.slice(0, 1)?.toUpperCase() || 'U';
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: '#F5F6FC' }}>
-      <Paper
+    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.default' }}>
+      <Box
         component="aside"
-        square
-        elevation={0}
         sx={{
-          position: 'fixed',
-          zIndex: 1200,
-          inset: '0 auto 0 0',
-          width: { sm: 76, md: 252 },
-          minHeight: '100dvh',
-          display: { xs: 'none', sm: 'flex' },
-          flexDirection: 'column',
-          overflowY: 'auto',
-          p: { sm: 1, md: 2 },
-          color: '#E6E9FF',
-          border: 0,
-          borderRadius: 0,
-          background: 'linear-gradient(180deg, #202C76 0%, #303C9B 40%, #27316F 100%)',
-          boxShadow: '9px 0 28px rgba(38, 45, 112, .12)',
+          position: 'fixed', inset: '0 auto 0 0', zIndex: 1200, display: { xs: 'none', sm: 'flex' }, flexDirection: 'column',
+          width: { sm: 72, md: SIDEBAR_WIDTH }, p: { sm: 1.5, md: 2 }, bgcolor: tokens.nav, color: tokens.navText, overflowY: 'auto',
         }}
       >
-        <Stack direction="row" alignItems="center" justifyContent={{ xs: 'center', md: 'flex-start' }} spacing={1.2} sx={{ px: { xs: 0, md: 1 }, py: 2.2, mb: 2 }}>
-          <Box sx={{ width: 39, height: 39, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 2.5, color: '#fff', border: '1px solid rgba(255,255,255,.22)', bgcolor: 'rgba(255,255,255,.13)' }}>
-            <Compass size={20} />
+        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ height: 48, mb: 2.5, px: { md: 0.5 }, justifyContent: { sm: 'center', md: 'flex-start' } }}>
+          <Box sx={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 2, color: '#fff', bgcolor: tokens.brand }}>
+            <Compass size={19} />
           </Box>
-          <Typography sx={{ display: { xs: 'none', md: 'block' }, color: '#fff', fontSize: 12.5, fontWeight: 900, letterSpacing: 1.25 }}>
-            RUTAS <Box component="span" sx={{ color: '#F4B7E3' }}>&</Box> GASTOS
-          </Typography>
+          <Typography sx={{ display: { sm: 'none', md: 'block' }, color: '#fff', fontWeight: 650, fontSize: 15, letterSpacing: '-0.01em' }}>Rutas &amp; Gastos</Typography>
         </Stack>
 
-        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 11, fontWeight: 850, letterSpacing: 1.25 }}>
-          GESTIÓN LOCAL
-        </Typography>
-        <List disablePadding sx={{ display: 'grid', gap: .5 }}>
-          <Tooltip title="Mis viajes" placement="right" disableHoverListener={false}>
-            <ListItemButton
-              selected={!selectedTripId}
-              onClick={() => setSelectedTripId(null)}
-              sx={{
-                minHeight: 44, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#DCE3FF',
-                '& .MuiListItemIcon-root': { color: '#B9C7FF', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' },
-                '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 750 },
-                '&.Mui-selected': { color: '#fff', bgcolor: 'rgba(255,255,255,.15)', boxShadow: 'inset 3px 0 #F5B7E4' },
-                '&.Mui-selected .MuiListItemIcon-root': { color: '#fff' },
-                '&:hover': { bgcolor: 'rgba(255,255,255,.10)' },
-              }}
-            >
-              <ListItemIcon><RouteIcon size={18} /></ListItemIcon>
-              <ListItemText primary="Viajes" sx={{ display: { xs: 'none', md: 'block' } }} />
-            </ListItemButton>
-          </Tooltip>
+        <Stack spacing={0.5} component="nav" aria-label="Navegación principal">
+          <Typography variant="overline" sx={{ display: { sm: 'none', md: 'block' }, px: 1.5, pb: 0.5, color: '#64748B' }}>Espacio</Typography>
+          <Box sx={{ display: { xs: 'none', md: 'block' } }}><NavItem icon={RouteIcon} label="Mis viajes" selected={!selectedTripId} onClick={() => setSelectedTripId(null)} /></Box>
+          <Box sx={{ display: { xs: 'none', sm: 'block', md: 'none' } }}><NavItem icon={RouteIcon} label="Mis viajes" selected={!selectedTripId} onClick={() => setSelectedTripId(null)} compact /></Box>
           {selected && (
-            <Tooltip title={selected.trip.name} placement="right">
-              <ListItemButton
-                selected
-                sx={{
-                  minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#fff',
-                  '& .MuiListItemIcon-root': { color: '#F7C5E8', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' },
-                  '& .MuiListItemText-primary': { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-                  '&.Mui-selected': { bgcolor: 'rgba(255,255,255,.11)' },
-                }}
-              >
-                <ListItemIcon><MapPin size={17} /></ListItemIcon>
-                <ListItemText primary={selected.trip.name} sx={{ display: { xs: 'none', md: 'block' } }} />
-              </ListItemButton>
-            </Tooltip>
+            <Box sx={{ display: { xs: 'none', md: 'block' } }}><NavItem icon={MapIcon} label={selected.trip.name.length > 22 ? `${selected.trip.name.slice(0, 21)}…` : selected.trip.name} selected /></Box>
           )}
-        </List>
+        </Stack>
 
-        <Divider sx={{ display: { xs: 'none', md: 'block' }, my: 2.2, borderColor: 'rgba(255,255,255,.14)' }} />
-        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 11, fontWeight: 850, letterSpacing: 1.15 }}>
-          DATOS DE ESTE EQUIPO
-        </Typography>
-        <List disablePadding sx={{ display: 'grid', gap: .5 }}>
-          <Tooltip title="Exportar copia" placement="right">
-            <ListItemButton onClick={exportBackup} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
-              <ListItemIcon><Download size={17} /></ListItemIcon>
-              <ListItemText primary="Exportar copia" sx={{ display: { xs: 'none', md: 'block' } }} />
-            </ListItemButton>
-          </Tooltip>
-          <Tooltip title="Restaurar copia" placement="right">
-            <ListItemButton onClick={() => fileInputRef.current?.click()} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
-              <ListItemIcon><Upload size={17} /></ListItemIcon>
-              <ListItemText primary="Restaurar copia" sx={{ display: { xs: 'none', md: 'block' } }} />
-            </ListItemButton>
-          </Tooltip>
-        </List>
+        <Stack spacing={0.5} sx={{ mt: 3 }}>
+          <Typography variant="overline" sx={{ display: { sm: 'none', md: 'block' }, px: 1.5, pb: 0.5, color: '#64748B' }}>Datos</Typography>
+          {[{ icon: Download, label: 'Exportar copia', onClick: exportBackup }, { icon: Upload, label: 'Restaurar copia', onClick: () => fileInputRef.current?.click() }].map((item) => (
+            <Box key={item.label}>
+              <Box sx={{ display: { xs: 'none', md: 'block' } }}><NavItem {...item} /></Box>
+              <Box sx={{ display: { xs: 'none', sm: 'block', md: 'none' } }}><NavItem {...item} compact /></Box>
+            </Box>
+          ))}
+        </Stack>
 
         <Box sx={{ mt: 'auto', pt: 2 }}>
-          <Divider sx={{ mb: 1.5, borderColor: 'rgba(255,255,255,.14)' }} />
-          <Stack direction="row" alignItems="center" spacing={1.1} sx={{ px: { xs: 0, md: .8 }, py: 1.2, justifyContent: { xs: 'center', md: 'flex-start' } }}>
-            <Avatar sx={{ width: 36, height: 36, bgcolor: 'linear-gradient(135deg,#E47DBA,#8B7CF4)', background: 'linear-gradient(135deg,#E47DBA,#8B7CF4)', color: '#fff', fontSize: 12, fontWeight: 850 }}>
-              {user.name?.slice(0, 1)?.toUpperCase() || 'U'}
-            </Avatar>
-            <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
-              <Typography sx={{ color: '#fff', fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</Typography>
-              <Typography sx={{ color: '#AFBAD8', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.organizationName}</Typography>
+          <Divider sx={{ borderColor: tokens.navLine, mb: 1.5 }} />
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ px: { md: 0.5 }, py: 1, justifyContent: { sm: 'center', md: 'flex-start' } }}>
+            <Avatar sx={{ width: 34, height: 34, fontSize: 14, fontWeight: 600, bgcolor: 'rgba(255,255,255,.12)', color: '#fff' }}>{initial}</Avatar>
+            <Box sx={{ display: { sm: 'none', md: 'block' }, minWidth: 0 }}>
+              <Typography noWrap sx={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{user.name}</Typography>
+              <Typography noWrap sx={{ color: tokens.navText, fontSize: 12.5 }}>{user.organizationName}</Typography>
             </Box>
           </Stack>
-          <Tooltip title="Editar perfil local" placement="right">
-            <ListItemButton onClick={editLocalProfile} sx={{ minHeight: 41, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
-              <ListItemIcon><HardDrive size={17} /></ListItemIcon>
-              <ListItemText primary="Editar perfil local" sx={{ display: { xs: 'none', md: 'block' } }} />
-            </ListItemButton>
-          </Tooltip>
+          <Box sx={{ display: { xs: 'none', md: 'block' } }}><NavItem icon={HardDrive} label="Editar perfil local" onClick={editLocalProfile} /></Box>
+          <Box sx={{ display: { xs: 'none', sm: 'block', md: 'none' } }}><NavItem icon={HardDrive} label="Editar perfil local" onClick={editLocalProfile} compact /></Box>
         </Box>
-      </Paper>
+      </Box>
 
-      <Paper
+      <Box
         component="nav"
-        aria-label="Navegación principal"
-        elevation={0}
+        aria-label="Navegación móvil"
         sx={{
-          display: { xs: 'flex', sm: 'none' },
-          position: 'fixed',
-          zIndex: 1300,
-          inset: 'auto 0 0',
-          alignItems: 'stretch',
-          justifyContent: 'space-around',
-          gap: 0.5,
-          px: 1,
-          pt: 1,
-          pb: 'max(8px, env(safe-area-inset-bottom))',
-          minHeight: 'calc(72px + env(safe-area-inset-bottom))',
-          border: '1px solid rgba(255,255,255,.12)',
-          borderBottom: 0,
-          borderRadius: '18px 18px 0 0',
-          color: '#fff',
-          background: 'linear-gradient(115deg, #202C76 0%, #303C9B 55%, #27316F 100%)',
-          boxShadow: '0 -8px 30px rgba(32,44,118,.20)',
+          display: { xs: 'flex', sm: 'none' }, position: 'fixed', zIndex: 1300, inset: 'auto 0 0', gap: 0.5, px: 1, pt: 0.75,
+          pb: 'max(8px, env(safe-area-inset-bottom))', bgcolor: tokens.nav, borderTop: `1px solid ${tokens.navLine}`,
         }}
       >
-        <ListItemButton
-          selected={!selectedTripId}
-          onClick={() => setSelectedTripId(null)}
-          aria-label="Ir a mis viajes"
-          sx={mobileNavItemSx}
-        >
-          <ListItemIcon><RouteIcon size={19} /></ListItemIcon>
-          <ListItemText primary="Viajes" />
-        </ListItemButton>
-        <ListItemButton onClick={exportBackup} aria-label="Exportar copia de seguridad" sx={mobileNavItemSx}>
-          <ListItemIcon><Download size={19} /></ListItemIcon>
-          <ListItemText primary="Exportar" />
-        </ListItemButton>
-        <ListItemButton onClick={() => fileInputRef.current?.click()} aria-label="Restaurar copia de seguridad" sx={mobileNavItemSx}>
-          <ListItemIcon><Upload size={19} /></ListItemIcon>
-          <ListItemText primary="Restaurar" />
-        </ListItemButton>
-        <ListItemButton onClick={editLocalProfile} aria-label="Editar perfil local" sx={mobileNavItemSx}>
-          <ListItemIcon><HardDrive size={19} /></ListItemIcon>
-          <ListItemText primary="Perfil" />
-        </ListItemButton>
-      </Paper>
+        <MobileNavItem icon={RouteIcon} label="Viajes" selected={!selectedTripId} onClick={() => setSelectedTripId(null)} />
+        <MobileNavItem icon={Download} label="Exportar" onClick={exportBackup} />
+        <MobileNavItem icon={Upload} label="Restaurar" onClick={() => fileInputRef.current?.click()} />
+        <MobileNavItem icon={HardDrive} label="Perfil" onClick={editLocalProfile} />
+      </Box>
 
       <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={importBackup} />
 
       <Box
         component="main"
-        sx={{
-          ml: { xs: 0, sm: '76px', md: '252px' },
-          width: { xs: '100%', sm: 'calc(100% - 76px)', md: 'calc(100% - 252px)' },
-          minWidth: 0,
-          pb: { xs: 'calc(88px + env(safe-area-inset-bottom))', sm: 0 },
-        }}
+        sx={{ ml: { xs: 0, sm: '72px', md: `${SIDEBAR_WIDTH}px` }, width: { xs: '100%', sm: 'calc(100% - 72px)', md: `calc(100% - ${SIDEBAR_WIDTH}px)` }, minWidth: 0, pb: { xs: 'calc(88px + env(safe-area-inset-bottom))', sm: 0 } }}
       >
-        <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'rgba(255,255,255,.88)', borderBottom: '1px solid #E8EAF3', backdropFilter: 'blur(18px)' }}>
-          <Toolbar sx={{ minHeight: { xs: '62px !important', md: '70px !important' }, px: { xs: 1.5, sm: 2.5, lg: 4 }, gap: 1.2, justifyContent: 'space-between' }}>
-            <Stack direction="row" alignItems="center" spacing={.8} sx={{ minWidth: 0 }}>
-              <Typography sx={{ color: '#78819B', fontSize: { xs: 12, sm: 12.5 }, fontWeight: 650, whiteSpace: 'nowrap' }}>Workspace</Typography>
-              <ChevronRight size={14} color="#A9AEC2" />
-              <Typography noWrap sx={{ color: '#263054', fontSize: { xs: 12, sm: 12 }, fontWeight: 800, maxWidth: { xs: 90, sm: 240 } }}>
-                {selected ? selected.trip.name : 'Mis viajes'}
-              </Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" spacing={{ xs: .6, sm: 1 }}>
-              {installPrompt && <Button size="small" variant="outlined" startIcon={<Download size={14} />} onClick={installApp} sx={{ minWidth: 0, px: { xs: 1, sm: 1.5 }, fontSize: { xs: 11, sm: 12.5 } }}>Instalar app</Button>}
-              <Tooltip title={online ? 'Con conexión' : 'Modo sin conexión'}>
-                <Chip size="small" icon={online ? <Wifi size={14} /> : <WifiOff size={14} />} label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{online ? 'Con conexión' : 'Modo sin conexión'}</Box>} color={online ? 'success' : 'warning'} variant="outlined" sx={{ '& .MuiChip-icon': { ml: 1 }, height: 31 }} />
-              </Tooltip>
-              <Tooltip title={offlineReady ? 'La aplicación está controlada por el Service Worker.' : 'El navegador todavía no confirmó el control offline de esta pestaña.'}>
-                <Chip size="small" icon={<HardDrive size={14} />} label={<Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>{offlineReady ? 'App offline preparada' : 'Preparando modo offline'}</Box>} color={offlineReady ? 'success' : 'warning'} variant="outlined" sx={{ '& .MuiChip-icon': { ml: 1 }, height: 31 }} />
-              </Tooltip>
-              <Avatar sx={{ width: 34, height: 34, ml: .4, color: '#fff', fontSize: 12.5, fontWeight: 850, background: 'linear-gradient(135deg,#6675F3,#C35EA9)' }} title={user.name}>
-                {user.name?.slice(0, 1)?.toUpperCase() || 'U'}
-              </Avatar>
-            </Stack>
-          </Toolbar>
-        </AppBar>
+        <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, height: 60, px: { xs: 2, sm: 3, lg: 5 }, bgcolor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${tokens.line}` }}>
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0, color: 'text.secondary' }}>
+            <ButtonBase onClick={() => setSelectedTripId(null)} sx={{ fontSize: 14, color: selectedTripId ? 'text.secondary' : 'text.primary', fontWeight: selectedTripId ? 400 : 600, borderRadius: 1 }}>Viajes</ButtonBase>
+            {selected && (<><ChevronRight size={15} /><Typography noWrap sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary', maxWidth: { xs: 160, sm: 320 } }}>{selected.trip.name}</Typography></>)}
+          </Stack>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            {installPrompt && <Button size="small" variant="outlined" startIcon={<Download size={15} />} onClick={installApp}>Instalar app</Button>}
+            <Tooltip title={offlineReady ? 'La app está lista para funcionar sin conexión.' : 'Todavía se está preparando el modo sin conexión.'}>
+              <Chip
+                size="small"
+                variant="outlined"
+                icon={online ? <Wifi size={14} /> : <WifiOff size={14} />}
+                label={online ? 'En línea' : 'Sin conexión'}
+                sx={{ color: online ? 'success.main' : 'warning.main', borderColor: online ? '#ABEFC6' : '#FEDF89', bgcolor: online ? tokens.positiveSoft : tokens.warningSoft, '& .MuiChip-icon': { color: 'inherit', ml: 1 } }}
+              />
+            </Tooltip>
+          </Stack>
+        </Box>
 
         {selectedTripId ? (
           <TripWorkspace key={selectedTripId} tripId={selectedTripId} online={online} onBack={() => setSelectedTripId(null)} onChanged={loadTrips} />
         ) : (
-          <Box sx={{ maxWidth: 1580, mx: 'auto', px: { xs: 1.5, sm: 2.5, lg: 4 }, py: { xs: 2.5, md: 4 } }}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
-              <Box>
-                <Typography sx={{ color: 'primary.main', fontSize: 12, fontWeight: 850, letterSpacing: 1.35 }}>PANEL DE CONTROL · ALMACENAMIENTO LOCAL</Typography>
-                <Typography component="h1" sx={{ mt: .7, color: '#202744', fontSize: { xs: 27, sm: 32 }, fontWeight: 900, letterSpacing: '-.05em' }}>Mis viajes</Typography>
-                <Typography color="text.secondary" sx={{ mt: .5, fontSize: 12 }}>Organizá recorridos y mantené tus números actualizados, incluso sin Internet.</Typography>
-              </Box>
-              <Button size="large" variant="contained" startIcon={<Plus size={18} />} onClick={openCreateDialog} sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, minHeight: 47, px: 2.3, background: 'linear-gradient(110deg,#5967E8,#825FDC 65%,#D85CA7)' }}>
-                Nuevo viaje
-              </Button>
-            </Stack>
+          <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, sm: 3, lg: 5 }, py: { xs: 3, md: 5 } }}>
+            <PageHeader
+              title="Mis viajes"
+              description="Planificá recorridos y controlá ingresos y gastos, incluso sin Internet."
+              actions={<Button size="large" variant="contained" startIcon={<Plus size={18} />} onClick={openCreateDialog}>Nuevo viaje</Button>}
+            />
 
-            {error && <Alert severity="error" variant="filled" sx={{ mb: 2, borderRadius: 3 }}>{error}</Alert>}
+            {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>{error}</Alert>}
             {!online && (
-              <Alert severity="warning" variant="outlined" icon={<WifiOff size={18} />} sx={{ mb: 2.5, borderRadius: 3, bgcolor: '#FFF9EB' }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 800 }}>Estás trabajando sin conexión.</Typography>
-                <Typography sx={{ fontSize: 12.5 }}>Los viajes, ingresos y gastos se guardan en esta computadora. La planificación con IA requiere Internet.</Typography>
+              <Alert severity="warning" icon={<WifiOff size={18} />} sx={{ mb: 3 }}>
+                <strong>Estás trabajando sin conexión.</strong> Tus viajes, ingresos y gastos se guardan en este equipo. La planificación de rutas con IA necesita Internet.
               </Alert>
             )}
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', lg: 'repeat(4,minmax(0,1fr))' }, gap: 1.5, mb: 4 }}>
-              <MetricCard label="Viajes registrados" value={trips.length} icon={RouteIcon} gradient="linear-gradient(135deg,#5368E6,#7985F4 65%,#9C83EF)" hint="En este dispositivo" />
-              <MetricCard label="Ganancia disponible · ARS" value={money(trips.reduce((sum, item) => sum + (item.financialSummary?.currency === 'ARS' ? (item.financialSummary?.availableProfit || 0) : 0), 0), 'ARS')} icon={Wallet} gradient="linear-gradient(135deg,#138A83,#2CB5A0 68%,#69C7B2)" hint="Pesos argentinos" />
-              <MetricCard label="Ganancia disponible · USD" value={money(trips.reduce((sum, item) => sum + (item.financialSummary?.currency === 'USD' ? (item.financialSummary?.availableProfit || 0) : 0), 0), 'USD')} icon={Wallet} gradient="linear-gradient(135deg,#C45C9D,#DF78B1 65%,#EE9BC4)" hint="Dólares estadounidenses" />
-              <MetricCard label="En planificación" value={trips.filter((item) => item.trip.status === 'PLANNED').length} icon={CalendarDays} gradient="linear-gradient(135deg,#C18432,#E3A84E 65%,#EEC77E)" hint="Viajes pendientes" />
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', lg: 'repeat(4,minmax(0,1fr))' }, gap: { xs: 1.5, md: 2 }, mb: { xs: 3, md: 4 } }}>
+              <Stat featured label="Saldo ARS" value={money(profitIn('ARS'), 'ARS')} icon={Wallet} hint="Suma de viajes en pesos" />
+              <Stat label="Saldo USD" value={money(profitIn('USD'), 'USD')} icon={Wallet} hint="Suma de viajes en dólares" />
+              <Stat label="Viajes" value={trips.length} icon={RouteIcon} hint={`${inProgress} en curso`} />
+              <Stat label="Planificados" value={planned} icon={CalendarClock} hint="Pendientes de iniciar" />
             </Box>
 
-            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.7 }}>
-              <Box>
-                <Typography component="h2" sx={{ color: '#252D4C', fontSize: 17, fontWeight: 850 }}>Actividad reciente</Typography>
-                <Typography color="text.secondary" sx={{ fontSize: 12.5 }}>Viajes guardados en este equipo</Typography>
-              </Box>
-              <Chip label={`${trips.length} registros`} size="small" variant="outlined" sx={{ bgcolor: '#fff', borderColor: '#E0E4F1', color: '#68718D', fontWeight: 750 }} />
-            </Stack>
-
-            {loading ? (
-              <Paper variant="outlined" sx={{ minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1.2, borderRadius: 4, borderColor: '#E5E8F2' }}>
-                <CircularProgress size={28} />
-                <Typography color="text.secondary" sx={{ fontSize: 12 }}>Cargando viajes locales...</Typography>
-              </Paper>
-            ) : trips.length ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(2,minmax(0,1fr))' }, gap: 1.7 }}>
-                {trips.map(({ trip, financialSummary }) => (
-                  <Card key={trip._id} sx={{ overflow: 'hidden', transition: 'transform .18s ease, box-shadow .18s ease', '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 17px 34px rgba(53,61,130,.12)' } }}>
-                    <CardContent sx={{ p: 2.2, '&:last-child': { pb: 2.2 } }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                        <Box sx={{ width: 43, height: 43, display: 'grid', placeItems: 'center', borderRadius: 2.7, color: '#fff', background: 'linear-gradient(135deg,#6878F2,#A16AE0)' }}>
-                          <RouteIcon size={20} />
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={.8}>
-                          <TripStatus status={trip.status} />
-                          <Tooltip title="Eliminar viaje">
-                            <span>
-                              <IconButton size="small" disabled={deletingTripId === trip._id} onClick={() => removeTrip(trip._id, trip.name)} aria-label={`Eliminar viaje ${trip.name}`} sx={{ color: '#C05269', border: '1px solid #F2DCE3', borderRadius: 2 }}>
-                                <Trash2 size={16} />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </Stack>
-                      </Stack>
-                      <ButtonBase onClick={() => setSelectedTripId(trip._id)} sx={{ width: '100%', display: 'block', textAlign: 'left', mt: 1.8, borderRadius: 2, '&:focus-visible': { outline: '3px solid rgba(89,103,232,.4)', outlineOffset: 3 } }}>
-                        <Typography component="h3" sx={{ color: '#232B4A', fontSize: 15, fontWeight: 850 }}>{trip.name}</Typography>
-                        <Typography noWrap title={[trip.origin, ...(trip.waypoints || []), trip.destination].join(' → ')} sx={{ mt: .75, color: '#74809C', fontSize: 12, minWidth: 0 }}>
-                          {[trip.origin, ...(trip.waypoints || []), trip.destination].join('  →  ')}
-                        </Typography>
-                        {(trip.waypoints || []).length > 0 && (
-                          <Chip size="small" label={`${trip.waypoints.length} paradas intermedias`} sx={{ mt: .8, height: 23, color: '#5363C9', bgcolor: '#EEF0FF', fontSize: 11, fontWeight: 750 }} />
-                        )}
-                        <Divider sx={{ my: 1.8, borderColor: '#EDF0F6' }} />
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Box>
-                            <Typography sx={{ color: '#7C849D', fontSize: 12, fontWeight: 650 }}>Ganancia disponible</Typography>
-                            <Typography sx={{ mt: .3, color: '#12866B', fontSize: 17, fontWeight: 900, letterSpacing: '-.025em' }}>{money(financialSummary.availableProfit, financialSummary.currency)}</Typography>
-                          </Box>
-                          <Box sx={{ width: 34, height: 34, display: 'grid', placeItems: 'center', color: '#6170DD', borderRadius: '50%', bgcolor: '#F0F1FF' }}>
-                            <ChevronRight size={18} />
-                          </Box>
-                        </Stack>
-                      </ButtonBase>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            ) : (
-              <Paper variant="outlined" sx={{ minHeight: 290, p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderRadius: 4, borderStyle: 'dashed', borderColor: '#CFD5EB', background: 'radial-gradient(circle at 50% 0%, rgba(126,120,241,.12), transparent 44%), linear-gradient(135deg,#FFFFFF,#F8F8FF)' }}>
-                <Box sx={{ width: 66, height: 66, display: 'grid', placeItems: 'center', borderRadius: 4, color: '#fff', background: 'linear-gradient(135deg,#6376F0,#A35ED5)', boxShadow: '0 10px 22px rgba(93,105,223,.22)' }}>
-                  <Compass size={30} />
+            <Section
+              title="Todos los viajes"
+              subtitle={trips.length ? `${trips.length} ${trips.length === 1 ? 'registro guardado' : 'registros guardados'} en este equipo` : 'Guardados en este equipo'}
+              padded={false}
+            >
+              {loading && !trips.length ? (
+                <Box sx={{ py: 8, display: 'grid', placeItems: 'center', gap: 1.5 }} role="status">
+                  <CircularProgress size={26} />
+                  <Typography color="textSecondary">Cargando viajes…</Typography>
                 </Box>
-                <Typography component="h2" sx={{ mt: 2, color: '#242D4D', fontSize: 18, fontWeight: 850 }}>Tu próximo viaje empieza acá</Typography>
-                <Typography color="text.secondary" sx={{ maxWidth: 340, mt: .6, mb: 2, fontSize: 12 }}>Creá un viaje para planificar una ruta y registrar ingresos y gastos.</Typography>
-                <Button variant="contained" startIcon={<Plus size={17} />} onClick={openCreateDialog}>Crear primer viaje</Button>
-              </Paper>
-            )}
+              ) : trips.length ? (
+                trips.map(({ trip, financialSummary }) => (
+                  <TripRow key={trip._id} trip={trip} summary={financialSummary} deleting={deletingTripId === trip._id} onOpen={() => setSelectedTripId(trip._id)} onDelete={() => removeTrip(trip._id, trip.name)} />
+                ))
+              ) : (
+                <EmptyState
+                  icon={Compass}
+                  title="Todavía no hay viajes"
+                  description="Creá tu primer viaje para planificar la ruta y registrar ingresos y gastos."
+                  action={<Button variant="contained" startIcon={<Plus size={17} />} onClick={openCreateDialog}>Crear primer viaje</Button>}
+                />
+              )}
+            </Section>
           </Box>
         )}
       </Box>
 
-      <Dialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        fullWidth
-        maxWidth="sm"
-        PaperProps={{
-          sx: {
-            m: { xs: 0, sm: 2 },
-            width: { xs: '100%', sm: 'calc(100% - 64px)' },
-            maxWidth: { xs: 'none', sm: 600 },
-            minHeight: { xs: '100dvh', sm: 'auto' },
-            maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' },
-            borderRadius: { xs: 0, sm: 4 },
-            overflow: 'hidden',
-          },
-        }}
-      >
-        <Box sx={{ px: 3, pt: 2.8, pb: 2.1, color: '#fff', background: 'linear-gradient(115deg,#4E5FD2,#7866DF 58%,#C35FA8)' }}>
-          <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 11, fontWeight: 850, letterSpacing: 1.3 }}>NUEVO REGISTRO LOCAL</Typography>
-          <Typography component="h2" sx={{ mt: .6, fontSize: 22, fontWeight: 900 }}>Crear viaje</Typography>
-        </Box>
-        <Box component="form" onSubmit={createTrip}>
-          <DialogContent sx={{ display: 'grid', gap: 2, p: { xs: 2, sm: 3 }, overflowY: 'auto' }}>
-            {error && <Alert severity="error" variant="outlined" onClose={() => setError('')}>{error}</Alert>}
-            <TextField fullWidth label="Nombre del viaje" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required slotProps={{ htmlInput: { minLength: 2, maxLength: 140 } }} placeholder="Ej.: Traslado de noviembre" />
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.7 }}>
+      <Dialog open={creating} onClose={() => setCreating(false)} fullWidth maxWidth="sm" scroll="paper" slotProps={{ paper: { sx: { m: { xs: 0, sm: 2 }, width: { xs: '100%', sm: 'calc(100% - 32px)' }, maxHeight: { xs: '100dvh', sm: 'calc(100% - 32px)' }, height: { xs: '100dvh', sm: 'auto' }, borderRadius: { xs: 0, sm: 4 } } } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, pb: 1.5 }}>
+          <Box>
+            <Typography component="span" variant="h2" sx={{ display: 'block' }}>Nuevo viaje</Typography>
+            <Typography component="span" variant="body2" color="textSecondary" sx={{ display: 'block', mt: 0.5, fontWeight: 400 }}>Se guarda en este equipo y queda disponible sin conexión.</Typography>
+          </Box>
+          <IconButton onClick={() => setCreating(false)} aria-label="Cerrar" size="small" sx={{ mt: -0.5, mr: -1 }}><X size={20} /></IconButton>
+        </DialogTitle>
+        <Box component="form" onSubmit={createTrip} sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+          <DialogContent dividers sx={{ display: 'grid', gap: 2.5, alignContent: 'start', p: { xs: 2, sm: 3 } }}>
+            {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+            <TextField fullWidth label="Nombre del viaje" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required autoFocus slotProps={{ htmlInput: { minLength: 2, maxLength: 140 } }} placeholder="Ej.: Traslado de noviembre" />
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               <TextField fullWidth label="Origen" value={form.origin} onChange={(event) => setForm((prev) => ({ ...prev, origin: event.target.value }))} required placeholder="Ciudad o dirección" />
               <TextField fullWidth label="Destino final" value={form.destination} onChange={(event) => setForm((prev) => ({ ...prev, destination: event.target.value }))} required placeholder="Ciudad o dirección" />
-              <Box sx={{ gridColumn: '1 / -1', p: 1.6, border: '1px solid #E3E7F3', borderRadius: 3, bgcolor: '#FAFBFF' }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
-                  <Box>
-                    <Typography sx={{ color: '#303A60', fontSize: 12.5, fontWeight: 850 }}>Paradas intermedias</Typography>
-                    <Typography sx={{ color: '#7B849D', fontSize: 11 }}>Agregá las ciudades o provincias que forman parte del recorrido.</Typography>
-                  </Box>
-                  <Chip size="small" label={`${form.waypoints.length}/10`} color="primary" variant="outlined" />
-                </Stack>
-                <Stack spacing={1}>
-                  {form.waypoints.map((point, index) => (
-                    <Stack key={index} direction="row" alignItems="center" spacing={.8}>
-                      <Typography sx={{ width: 22, color: '#7580A0', fontSize: 12, fontWeight: 800, textAlign: 'center' }}>{index + 1}.</Typography>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label={`Parada ${index + 1}`}
-                        value={point}
-                        onChange={(event) => updateWaypoint(index, event.target.value)}
-                        placeholder="Ej.: Neuquén, Neuquén"
-                        slotProps={{ htmlInput: { maxLength: 180 } }}
-                      />
-                      <IconButton size="small" onClick={() => removeWaypoint(index)} aria-label={`Quitar parada ${index + 1}`} sx={{ color: '#BD5366', border: '1px solid #F0DDE3', borderRadius: 2 }}>
-                        <Trash2 size={16} />
-                      </IconButton>
-                    </Stack>
-                  ))}
-                </Stack>
-                <Button size="small" onClick={addWaypoint} disabled={form.waypoints.length >= 10} startIcon={<Plus size={15} />} sx={{ mt: 1.2 }}>
-                  Agregar parada
-                </Button>
-                <Typography sx={{ mt: .5, color: '#8790A8', fontSize: 11 }}>
-                  El orden ingresado se respeta al calcular la ruta. Podés cargar hasta 10 paradas.
-                </Typography>
-              </Box>
+            </Box>
+
+            <Box sx={{ p: 2, border: `1px solid ${tokens.line}`, borderRadius: 2.5, bgcolor: tokens.surfaceMuted }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: form.waypoints.length ? 1.5 : 0.5 }}>
+                <Box>
+                  <Typography variant="subtitle2">Paradas intermedias</Typography>
+                  <Typography variant="caption" color="textSecondary">Se respeta el orden al calcular la ruta. Hasta 10.</Typography>
+                </Box>
+                <Chip size="small" label={`${form.waypoints.length}/10`} variant="outlined" />
+              </Stack>
+              <Stack spacing={1.25}>
+                {form.waypoints.map((point, index) => (
+                  <Stack key={index} direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 24, height: 24, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: tokens.brandSoft, color: tokens.brand, fontSize: 12, fontWeight: 600 }}>{index + 1}</Box>
+                    <TextField fullWidth size="small" aria-label={`Parada ${index + 1}`} value={point} onChange={(event) => updateWaypoint(index, event.target.value)} placeholder="Ej.: Neuquén, Neuquén" slotProps={{ htmlInput: { maxLength: 180 } }} />
+                    <IconButton onClick={() => removeWaypoint(index)} aria-label={`Quitar parada ${index + 1}`} size="small"><Trash2 size={16} /></IconButton>
+                  </Stack>
+                ))}
+              </Stack>
+              <Button size="small" onClick={addWaypoint} disabled={form.waypoints.length >= 10} startIcon={<Plus size={15} />} sx={{ mt: 1, ml: -0.5 }}>Agregar parada</Button>
+            </Box>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
               <TextField fullWidth type="date" label="Fecha de inicio" value={form.startDate} onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))} slotProps={{ inputLabel: { shrink: true } }} />
-              <TextField fullWidth type="number" label="Ganancia inicial" value={form.incomeAmount} onChange={(event) => setForm((prev) => ({ ...prev, incomeAmount: event.target.value }))} slotProps={{ htmlInput: { min: 0, step: .01 } }} />
+              <TextField fullWidth type="number" label="Ganancia inicial" value={form.incomeAmount} onChange={(event) => setForm((prev) => ({ ...prev, incomeAmount: event.target.value }))} slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal' } }} />
               <TextField fullWidth select label="Moneda" value={form.incomeCurrency} onChange={(event) => setForm((prev) => ({ ...prev, incomeCurrency: event.target.value }))}>
-                <MenuItem value="ARS">ARS · Peso argentino</MenuItem>
+                <MenuItem value="ARS">ARS · Peso</MenuItem>
                 <MenuItem value="USD">USD · Dólar</MenuItem>
               </TextField>
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, pt: 1, gap: 1, flexDirection: { xs: 'column', sm: 'row' }, '& > .MuiButton-root': { width: { xs: '100%', sm: 'auto' } } }}>
-            <Button type="button" color="inherit" variant="outlined" onClick={() => setCreating(false)}>Cancelar</Button>
-            <Button type="submit" variant="contained" disabled={savingTrip} endIcon={<ChevronRight size={17} />}>{savingTrip ? 'Creando...' : 'Crear viaje'}</Button>
+          <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2, gap: 1, flexDirection: { xs: 'column-reverse', sm: 'row' }, '& > .MuiButton-root': { width: { xs: '100%', sm: 'auto' }, m: 0 } }}>
+            <Button type="button" variant="outlined" onClick={() => setCreating(false)}>Cancelar</Button>
+            <Button type="submit" variant="contained" disabled={savingTrip}>{savingTrip ? 'Creando…' : 'Crear viaje'}</Button>
           </DialogActions>
         </Box>
       </Dialog>
