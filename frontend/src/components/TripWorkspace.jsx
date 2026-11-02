@@ -20,7 +20,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Fuel, Landmark, MapPinned,
+  ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Download, Fuel, Landmark, MapPinned,
   PawPrint, Plus, Receipt, Route as RouteIcon, ShieldAlert, Sparkles, Trash2, TrendingDown, Truck, Utensils, Wallet, WifiOff, Wrench,
 } from 'lucide-react';
 import http from '../api/http.js';
@@ -28,6 +28,7 @@ import { GOOGLE_MAPS_BROWSER_KEY_CONFIGURED, ROUTE_SERVICE_CONFIGURED } from '..
 import { tokens } from '../theme.js';
 import MapCanvas from './MapCanvas.jsx';
 import { EmptyState, KeyValue, Section, Stack, Stat, StatusChip } from './ui.jsx';
+import { downloadRoadSheet } from '../utils/roadSheet.js';
 import { categoryLabel, dateLabel, distance, duration, expenseCategories, money } from '../utils.js';
 
 // Evaluated per form, in the user's local time zone. A module-level constant
@@ -67,6 +68,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   const plannerInFlightRef = useRef(false);
   const [savingRoute, setSavingRoute] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const mountedRef = useRef(true);
   const promptSeededRef = useRef(false);
 
@@ -240,6 +242,21 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
     }
   }
 
+  async function exportRoadSheet() {
+    if (!activeRoute || exportingPdf) return;
+    setExportingPdf(true);
+    setError('');
+    setSuccess('');
+    try {
+      await downloadRoadSheet(currentTrip, activeRoute);
+      if (mountedRef.current) setSuccess('Hoja de ruta descargada en PDF.');
+    } catch (pdfError) {
+      if (mountedRef.current) setError(pdfError.message || 'No se pudo generar el PDF de la hoja de ruta.');
+    } finally {
+      if (mountedRef.current) setExportingPdf(false);
+    }
+  }
+
   if (!currentTrip) {
     return (
       <Box sx={{ minHeight: 320, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1.5 }} role="status">
@@ -408,7 +425,14 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             )}
           </Section>
 
-          <Section title="Mapa del recorrido" subtitle="Visualización de la alternativa seleccionada" action={<Chip size="small" variant="outlined" label={mapChip} />}>
+          <Section title="Mapa del recorrido" subtitle="Visualización de la alternativa seleccionada" action={(
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Chip size="small" variant="outlined" label={mapChip} sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />
+              <Button size="small" variant="outlined" startIcon={<Download size={15} />} onClick={exportRoadSheet} disabled={!activeRoute || exportingPdf} title={activeRoute ? 'Descargar la hoja de ruta con todas las indicaciones' : 'Calculá o guardá una ruta para descargar la hoja de ruta'}>
+                {exportingPdf ? 'Generando…' : 'Hoja de ruta PDF'}
+              </Button>
+            </Stack>
+          )}>
             <Box sx={{ minWidth: 0, overflow: 'hidden', borderRadius: 2.5, border: `1px solid ${tokens.line}` }}>
               <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
             </Box>
