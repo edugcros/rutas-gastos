@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  analyzeRoutes, buildAnalysisPrompt, extractRoadNames, extractSources, findAvoidedRoadMatches, parseAnalysisText,
+  analyzeRoutes, buildAnalysisPrompt, resetAnalysisState, extractRoadNames, extractSources, findAvoidedRoadMatches, parseAnalysisText,
 } from '../src/services/roadAnalysis.js';
 
 const route = {
@@ -135,4 +135,28 @@ test('analyzeRoutes never throws: provider errors and bad output yield null', as
   assert.equal(await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai: failing }), null);
   assert.equal(await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai: garbage }), null);
   assert.equal(await analyzeRoutes({ intent, userPrompt: 'x', routes: [], ai: garbage }), null);
+});
+
+test('after a quota error web search is skipped for a while, then retried', async () => {
+  resetAnalysisState();
+  const calls = [];
+  const ai = { models: { generateContent: async (request) => {
+    const web = Boolean(request.config.tools);
+    calls.push(web);
+    if (web) { const error = new Error('quota'); error.status = 429; throw error; }
+    return { text: JSON.stringify(validJson) };
+  } } };
+  const t0 = new Date('2026-11-02T12:00:00Z');
+  await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 't', now: t0 });
+  await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 't', now: new Date(t0.getTime() + 60_000) });
+  assert.deepEqual(calls, [true, false, false], 'second request goes straight to the knowledge mode');
+  await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 't', now: new Date(t0.getTime() + 11 * 60_000) });
+  assert.deepEqual(calls, [true, false, false, true, false], 'web search is retried after the block expires');
+  resetAnalysisState();
+});
+
+test('the analysis prompt stays compact for long routes', () => {
+  const long = { ...route, legs: [{ distanceMeters: 1, instructions: Array.from({ length: 200 }, (_, i) => `Paso ${i} ${'x'.repeat(300)}`) }] };
+  const prompt = buildAnalysisPrompt({ intent, userPrompt: 'x', routes: [long] });
+  assert.ok(prompt.length < 6000, `prompt is ${prompt.length} chars`);
 });
