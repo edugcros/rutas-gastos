@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { rankSpanishVoices } from '../utils/speech.js';
-import { STYLE_PREVIEW, VOICE_STYLES, pickVoiceForStyle, styleText } from '../utils/voiceStyles.js';
+import { STYLE_PREVIEW, VOICE_STYLES, pickVoiceForStyle, styleParts } from '../utils/voiceStyles.js';
 
 const STORAGE_KEY = 'rutas-gastos:speech';
 
@@ -81,31 +81,40 @@ export function useSpeechReader(segments) {
     moveTo(start);
     setStatus('playing');
 
+    // Cada segmento se dice en tramos (frases cortas) con tono y velocidad propios: así el
+    // estilo puede tener melodía. Solo el último tramo avanza al segmento siguiente.
     const speakSegment = (position) => {
       const style = activeStyleRef.current;
-      const utterance = new SpeechSynthesisUtterance(styleText(style.id, list[position].text));
       const voice = voiceRef.current;
-      utterance.lang = voice?.lang || 'es-AR';
-      if (voice) utterance.voice = voice;
-      // Velocidad elegida por la persona x factor del estilo (los estilos suaves leen más despacio).
-      utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate));
-      utterance.pitch = style.pitch;
-      utterance.volume = style.volume;
-      utterance.onend = () => {
-        if (token !== tokenRef.current) return;
-        if (position + 1 < list.length) {
-          moveTo(position + 1);
-          speakSegment(position + 1);
-        } else {
-          setStatus('finished');
-        }
+      const parts = styleParts(style.id, list[position].text, voice);
+
+      const speakPart = (partIndex) => {
+        const part = parts[partIndex];
+        const utterance = new SpeechSynthesisUtterance(part.text);
+        utterance.lang = voice?.lang || 'es-AR';
+        if (voice) utterance.voice = voice;
+        // Velocidad elegida por la persona x factor del estilo x factor del tramo.
+        utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate * part.rateFactor));
+        utterance.pitch = part.pitch;
+        utterance.volume = style.volume;
+        utterance.onend = () => {
+          if (token !== tokenRef.current) return;
+          if (partIndex + 1 < parts.length) speakPart(partIndex + 1);
+          else if (position + 1 < list.length) {
+            moveTo(position + 1);
+            speakSegment(position + 1);
+          } else {
+            setStatus('finished');
+          }
+        };
+        utterance.onerror = (event) => {
+          if (token !== tokenRef.current) return;
+          // "interrupted"/"canceled" son cancelaciones propias; cualquier otro error detiene la lectura.
+          if (event.error !== 'interrupted' && event.error !== 'canceled') setStatus('paused');
+        };
+        window.speechSynthesis.speak(utterance);
       };
-      utterance.onerror = (event) => {
-        if (token !== tokenRef.current) return;
-        // "interrupted"/"canceled" son cancelaciones propias; cualquier otro error detiene la lectura.
-        if (event.error !== 'interrupted' && event.error !== 'canceled') setStatus('paused');
-      };
-      window.speechSynthesis.speak(utterance);
+      speakPart(0);
     };
 
     // Chrome pierde el primer speak() si llega justo después de cancel().
@@ -168,14 +177,22 @@ export function useSpeechReader(segments) {
     halt();
     setStatus((current) => (current === 'playing' ? 'paused' : current));
     const style = activeStyleRef.current;
-    const utterance = new SpeechSynthesisUtterance(styleText(style.id, STYLE_PREVIEW));
     const voice = voiceRef.current;
-    utterance.lang = voice?.lang || 'es-AR';
-    if (voice) utterance.voice = voice;
-    utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate));
-    utterance.pitch = style.pitch;
-    utterance.volume = style.volume;
-    window.setTimeout(() => window.speechSynthesis.speak(utterance), 60);
+    const token = tokenRef.current;
+    const parts = styleParts(style.id, STYLE_PREVIEW, voice);
+    const speakPart = (partIndex) => {
+      if (token !== tokenRef.current || partIndex >= parts.length) return;
+      const part = parts[partIndex];
+      const utterance = new SpeechSynthesisUtterance(part.text);
+      utterance.lang = voice?.lang || 'es-AR';
+      if (voice) utterance.voice = voice;
+      utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate * part.rateFactor));
+      utterance.pitch = part.pitch;
+      utterance.volume = style.volume;
+      utterance.onend = () => speakPart(partIndex + 1);
+      window.speechSynthesis.speak(utterance);
+    };
+    window.setTimeout(() => speakPart(0), 60);
   }, [halt]);
 
   // Si cambia la hoja de ruta (otra alternativa), la lectura anterior ya no corresponde.
