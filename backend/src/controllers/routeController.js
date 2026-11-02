@@ -19,7 +19,11 @@ function normalizeLocation(value) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+// El frontend espera hasta 60 s. Este es el tiempo total del pedido; el análisis usa lo que sobre.
+const REQUEST_BUDGET_MS = Number(process.env.ROUTE_REQUEST_BUDGET_MS || 48_000);
+
 export async function planRoute(req, res) {
+  const startedAt = Date.now();
   const { prompt, route } = schema.parse(req.body);
   if (route) {
     const locations = [route.origin, ...route.waypoints, route.destination].map(normalizeLocation);
@@ -31,7 +35,7 @@ export async function planRoute(req, res) {
   const routes = await computeGoogleRoutes(intent);
 
   // Complemento: tipo de camino y cortes. Si falla, la ruta se entrega igual.
-  const analysis = await analyzeRoutes({ intent, userPrompt: prompt, routes });
+  const analysis = await analyzeRoutes({ intent, userPrompt: prompt, routes, budgetMs: REQUEST_BUDGET_MS - (Date.now() - startedAt) });
   const avoidWarnings = routes
     .map((candidate, routeIndex) => ({ routeIndex, matches: findAvoidedRoadMatches(intent.avoidAreas, candidate) }))
     .filter((entry) => entry.matches.length > 0)

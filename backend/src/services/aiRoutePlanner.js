@@ -33,6 +33,17 @@ export function sanitizeUserNotes(notes = []) {
     });
 }
 
+// Sin límite, una llamada lenta dejaba el pedido colgado más de 60 s (el frontend corta a los 60 s).
+const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 22_000);
+
+function callWithTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('AI_TIMEOUT'), { status: 504, timedOut: true })), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const MAX_ATTEMPTS = 3;
 const BASE_RETRY_DELAY_MS = 800;
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
@@ -51,9 +62,11 @@ async function generateWithRetry(ai, request) {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await ai.models.generateContent(request);
+      return await callWithTimeout(ai.models.generateContent(request), GEMINI_CALL_TIMEOUT_MS);
     } catch (error) {
       lastError = error;
+      // Un tiempo agotado no se reintenta: tres esperas seguidas superarían el límite del pedido.
+      if (error?.timedOut) break;
       const providerStatus = getProviderStatus(error);
       const canRetry = RETRYABLE_PROVIDER_STATUSES.has(providerStatus);
 
@@ -114,12 +127,12 @@ async function generateWithRetry(ai, request) {
   );
 }
 
-export async function interpretRoutePrompt(prompt, fixedRoute = null) {
-  if (!process.env.GEMINI_API_KEY) {
+export async function interpretRoutePrompt(prompt, fixedRoute = null, { client = null } = {}) {
+  if (!client && !process.env.GEMINI_API_KEY) {
     throw new HttpError(503, 'La planificación con IA no está configurada. Configure GEMINI_API_KEY.');
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const ai = client || new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const response = await generateWithRetry(ai, {
     model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
     contents: [

@@ -41,6 +41,8 @@ const WEB_TIMEOUT_MS = 18_000;
 const KNOWLEDGE_TIMEOUT_MS = 24_000;
 // Si la búsqueda web responde "sin cuota" no tiene sentido reintentarla en cada pedido:
 // se saltea durante este tiempo (ahorra latencia y llamadas fallidas).
+// Con menos tiempo que esto no vale la pena intentar un análisis.
+const MIN_ATTEMPT_MS = 4_000;
 const WEB_BLOCK_MS = 10 * 60_000;
 let webBlockedUntil = 0;
 
@@ -253,7 +255,7 @@ async function attempt({ client, model, intent, userPrompt, routes, now, webSear
 /**
  * @returns {Promise<null | {routes: object[], sources: object[], generatedAt: string, grounded: boolean, mode: 'web'|'knowledge'}>}
  */
-export async function analyzeRoutes({ intent, userPrompt, routes, ai, model, now = new Date() }) {
+export async function analyzeRoutes({ intent, userPrompt, routes, ai, model, now = new Date(), budgetMs = Infinity }) {
   const client = ai || (process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null);
   if (!client || !routes?.length) return null;
   const chosenModel = model || process.env.GEMINI_ANALYSIS_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
@@ -261,10 +263,17 @@ export async function analyzeRoutes({ intent, userPrompt, routes, ai, model, now
 
   // La búsqueda web puede no estar disponible (cuota o plan): se degrada a conocimiento general.
   // El análisis es un complemento: nunca debe impedir que el usuario reciba su ruta.
+  // El análisis comparte el tiempo que le queda al pedido: nunca debe hacerlo exceder su límite.
+  const deadline = Date.now() + budgetMs;
   for (const [webSearch, timeoutMs] of [[true, WEB_TIMEOUT_MS], [false, KNOWLEDGE_TIMEOUT_MS]]) {
     if (webSearch && now.getTime() < webBlockedUntil) continue;
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_ATTEMPT_MS) {
+      console.warn('[ROAD_ANALYSIS_SKIPPED]', JSON.stringify({ webSearch, remainingMs: Math.max(0, Math.round(remaining)) }));
+      continue;
+    }
     try {
-      return await attempt({ ...base, webSearch, timeoutMs });
+      return await attempt({ ...base, webSearch, timeoutMs: Math.min(timeoutMs, remaining) });
     } catch (error) {
       // 429 (cuota), 403 (sin permiso) o 400 (herramienta no admitida): la búsqueda no va a funcionar pronto.
       if (webSearch && [429, 403, 400].includes(Number(error?.status))) webBlockedUntil = now.getTime() + WEB_BLOCK_MS;
