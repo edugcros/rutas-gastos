@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Alert, Box, Button, LinearProgress, MenuItem, TextField, Typography } from '@mui/material';
-import { Pause, Play, Repeat, SkipBack, SkipForward, Square, Volume2 } from 'lucide-react';
+import { Mic, Pause, Play, Repeat, SkipBack, SkipForward, Square, Volume2 } from 'lucide-react';
 import { useSpeechReader } from '../hooks/useSpeechReader.js';
 import { buildSpeechScript } from '../utils/speech.js';
 import { tokens } from '../theme.js';
 import { Section, Stack } from './ui.jsx';
 
 const RATES = [0.75, 1, 1.25, 1.5];
+function styleHelp(styleId, match, voice, styles) {
+  if (styleId === 'standard') return undefined;
+  const name = voice ? `${voice.name} (${voice.lang})` : '';
+  if (match === 'approx') {
+    const wanted = styleId === 'colombiana' ? 'una voz femenina colombiana' : 'una voz femenina rusa';
+    return `Aproximada: no hay ${wanted} instalada. Se usa ${name}. Instalá más voces en los ajustes de idioma del sistema.`;
+  }
+  return `Voz: ${name}`;
+}
+
 const STATUS_TEXT = { idle: 'Lista para leer', playing: 'Leyendo', paused: 'En pausa', finished: 'Lectura terminada' };
 
 /**
@@ -17,7 +27,7 @@ const STATUS_TEXT = { idle: 'Lista para leer', playing: 'Leyendo', paused: 'En p
 export default function RoadSheetReader({ model, startSignal = 0 }) {
   const segments = useMemo(() => buildSpeechScript(model), [model]);
   const reader = useSpeechReader(segments);
-  const { supported, status, index, total, current, voices, voiceURI, rate, play, pause, stop, next, previous, repeat, setRate, setVoiceURI } = reader;
+  const { supported, status, index, total, current, voices, voiceURI, rate, styles, styleId, styleVoice, styleMatch, play, pause, stop, next, previous, repeat, setRate, setVoiceURI, setStyleId, preview } = reader;
   const regionRef = useRef(null);
   const lastSignalRef = useRef(startSignal);
 
@@ -97,11 +107,25 @@ export default function RoadSheetReader({ model, startSignal = 0 }) {
           <Button variant="outlined" color="inherit" onClick={stop} disabled={status === 'idle'} startIcon={<Square size={15} />} aria-label="Detener lectura" sx={{ minHeight: 48 }}>Detener</Button>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: voices.length > 1 ? '1fr 1fr' : '1fr' }, gap: 1.5, mt: 2.5 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr auto' }, gap: 1.5, alignItems: 'start', mt: 2.5 }}>
+          <TextField select size="small" label="Estilo de voz" value={styleId} onChange={(event) => setStyleId(event.target.value)} helperText={styleHelp(styleId, styleMatch, styleVoice, styles)}>
+            {styles.map((style) => (
+              <MenuItem key={style.id} value={style.id} disabled={style.match === 'none'}>
+                <Box>
+                  <Typography component="span" sx={{ display: 'block' }}>{style.label}</Typography>
+                  {style.match === 'none' && <Typography component="span" variant="caption" color="textSecondary">No hay una voz compatible instalada en este dispositivo</Typography>}
+                </Box>
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button variant="outlined" onClick={preview} startIcon={<Mic size={16} />} aria-label="Probar la voz elegida" sx={{ minHeight: 40 }}>Probar voz</Button>
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: voices.length > 1 && styleId === 'standard' ? '1fr 1fr' : '1fr' }, gap: 1.5, mt: 2 }}>
           <TextField select size="small" label="Velocidad de lectura" value={rate} onChange={(event) => setRate(Number(event.target.value))}>
             {RATES.map((value) => <MenuItem key={value} value={value}>{value === 1 ? 'Normal (1x)' : `${value}x`}</MenuItem>)}
           </TextField>
-          {voices.length > 1 && (
+          {voices.length > 1 && styleId === 'standard' && (
             <TextField select size="small" label="Voz" value={voiceURI} onChange={(event) => setVoiceURI(event.target.value)}>
               {voices.map((voice) => <MenuItem key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</MenuItem>)}
             </TextField>

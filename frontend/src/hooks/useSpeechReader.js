@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { rankSpanishVoices } from '../utils/speech.js';
+import { STYLE_PREVIEW, VOICE_STYLES, pickVoiceForStyle, styleText } from '../utils/voiceStyles.js';
 
 const STORAGE_KEY = 'rutas-gastos:speech';
 
@@ -24,8 +25,8 @@ export function useSpeechReader(segments) {
   const supported = isSpeechSupported();
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState('idle'); // idle | playing | paused | finished
-  const [voices, setVoices] = useState([]);
-  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', ...readPrefs() }));
+  const [allVoices, setAllVoices] = useState([]);
+  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', styleId: 'standard', ...readPrefs() }));
 
   const tokenRef = useRef(0); // invalida callbacks de utterances ya cancelados
   const indexRef = useRef(0);
@@ -39,17 +40,26 @@ export function useSpeechReader(segments) {
 
   useEffect(() => {
     if (!supported) return undefined;
-    const load = () => setVoices(rankSpanishVoices(window.speechSynthesis.getVoices()));
+    const load = () => setAllVoices(window.speechSynthesis.getVoices());
     load();
     window.speechSynthesis.addEventListener?.('voiceschanged', load);
     return () => window.speechSynthesis.removeEventListener?.('voiceschanged', load);
   }, [supported]);
 
+  const voices = useMemo(() => rankSpanishVoices(allVoices), [allVoices]);
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.voiceURI === prefs.voiceURI) || voices[0] || null,
     [voices, prefs.voiceURI],
   );
-  useEffect(() => { voiceRef.current = selectedVoice; }, [selectedVoice]);
+
+  // Disponibilidad de cada estilo según las voces instaladas en este dispositivo.
+  const styles = useMemo(() => VOICE_STYLES.map((style) => ({
+    ...style,
+    ...(style.id === 'standard' ? { voice: selectedVoice, match: 'exact' } : pickVoiceForStyle(style.id, allVoices)),
+  })), [allVoices, selectedVoice]);
+  const activeStyle = styles.find((style) => style.id === prefs.styleId && style.match !== 'none') || styles[0];
+  const activeStyleRef = useRef(activeStyle);
+  useEffect(() => { activeStyleRef.current = activeStyle; voiceRef.current = activeStyle.voice || selectedVoice; }, [activeStyle, selectedVoice]);
 
   const halt = useCallback(() => {
     tokenRef.current += 1;
@@ -72,11 +82,15 @@ export function useSpeechReader(segments) {
     setStatus('playing');
 
     const speakSegment = (position) => {
-      const utterance = new SpeechSynthesisUtterance(list[position].text);
+      const style = activeStyleRef.current;
+      const utterance = new SpeechSynthesisUtterance(styleText(style.id, list[position].text));
       const voice = voiceRef.current;
       utterance.lang = voice?.lang || 'es-AR';
       if (voice) utterance.voice = voice;
-      utterance.rate = prefsRef.current.rate || 1;
+      // Velocidad elegida por la persona x factor del estilo (los estilos suaves leen más despacio).
+      utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate));
+      utterance.pitch = style.pitch;
+      utterance.volume = style.volume;
       utterance.onend = () => {
         if (token !== tokenRef.current) return;
         if (position + 1 < list.length) {
@@ -138,6 +152,32 @@ export function useSpeechReader(segments) {
     if (status === 'playing') speakFrom(indexRef.current);
   }, [speakFrom, status, voices]);
 
+  const setStyleId = useCallback((styleId) => {
+    setPrefs((current) => ({ ...current, styleId }));
+    const target = styles.find((style) => style.id === styleId);
+    if (target && target.match !== 'none') {
+      activeStyleRef.current = target;
+      voiceRef.current = target.voice || voiceRef.current;
+    }
+    if (status === 'playing') speakFrom(indexRef.current);
+  }, [speakFrom, status, styles]);
+
+  /** Frase corta con el estilo activo, para elegir voz sin recorrer la hoja de ruta. */
+  const preview = useCallback(() => {
+    if (!isSpeechSupported()) return;
+    halt();
+    setStatus((current) => (current === 'playing' ? 'paused' : current));
+    const style = activeStyleRef.current;
+    const utterance = new SpeechSynthesisUtterance(styleText(style.id, STYLE_PREVIEW));
+    const voice = voiceRef.current;
+    utterance.lang = voice?.lang || 'es-AR';
+    if (voice) utterance.voice = voice;
+    utterance.rate = Math.min(2, Math.max(0.5, (prefsRef.current.rate || 1) * style.rate));
+    utterance.pitch = style.pitch;
+    utterance.volume = style.volume;
+    window.setTimeout(() => window.speechSynthesis.speak(utterance), 60);
+  }, [halt]);
+
   // Si cambia la hoja de ruta (otra alternativa), la lectura anterior ya no corresponde.
   const scriptKey = segments.map((segment) => segment.text).join('\n');
   useEffect(() => {
@@ -153,6 +193,7 @@ export function useSpeechReader(segments) {
   return {
     supported, status, index, total: segments.length, current: segments[index] || null,
     voices, voiceURI: selectedVoice?.voiceURI || '', rate: prefs.rate,
-    play, pause, stop, next, previous, repeat, jump, setRate, setVoiceURI,
+    styles, styleId: activeStyle.id, styleVoice: activeStyle.voice, styleMatch: activeStyle.match,
+    play, pause, stop, next, previous, repeat, jump, setRate, setVoiceURI, setStyleId, preview,
   };
 }
