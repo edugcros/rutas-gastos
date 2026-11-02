@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './styles/global.css';
+// Presentational layer: keep after the base stylesheet to preserve component contracts.
+import './styles/visual-system.css';
 
 // Register early. The generated worker precaches the complete production shell,
 // not just index.html, so a later cold start can load while offline.
