@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: rutas-gastos-route-service
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start:routes
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: ROUTE_LIMIT_PER_MINUTE
+        value: "5"
+      - key: ROUTE_LIMIT_PER_DAY
+        value: "25"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: APP_ORIGINS
+        sync: false
