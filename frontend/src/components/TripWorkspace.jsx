@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, CalendarDays, Check, CircleDollarSign, Clock3, Fuel, MapPinned,
   Plus, Route as RouteIcon, ShieldAlert, Trash2, Wallet, WifiOff,
@@ -24,6 +24,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   const [showExpense, setShowExpense] = useState(false);
   const [incomeAmount, setIncomeAmount] = useState('');
   const [busy, setBusy] = useState(false);
+  const plannerInFlightRef = useRef(false);
   const [savingRoute, setSavingRoute] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -68,14 +69,33 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
 
   async function runPlanner(event) {
     event.preventDefault();
-    setBusy(true); setError(''); setSuccess('');
+
+    // El estado busy actualiza la interfaz en el siguiente render.
+    // El ref bloquea de forma síncrona un segundo submit dentro del mismo ciclo.
+    if (plannerInFlightRef.current) return;
+
+    const normalizedPrompt = prompt.trim();
+    if (normalizedPrompt.length < 10) {
+      setError('Describí el recorrido con al menos 10 caracteres útiles.');
+      setSuccess('');
+      return;
+    }
+
+    plannerInFlightRef.current = true;
+    setBusy(true);
+    setError('');
+    setSuccess('');
+
     try {
-      const { data } = await http.post('/routes/plan', { prompt });
+      const { data } = await http.post('/routes/plan', { prompt: normalizedPrompt });
       setPlan(data);
       setSelectedIndex(0);
     } catch (requestError) {
       setError(requestError.userMessage || 'No se pudo calcular el recorrido.');
-    } finally { setBusy(false); }
+    } finally {
+      plannerInFlightRef.current = false;
+      setBusy(false);
+    }
   }
 
   async function persistRoute() {
