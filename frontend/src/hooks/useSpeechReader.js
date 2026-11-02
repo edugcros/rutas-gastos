@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { rankSpanishVoices } from '../utils/speech.js';
-import { STYLE_PREVIEW, VOICE_STYLES, pickVoiceForStyle, styleParts } from '../utils/voiceStyles.js';
+import { STYLE_PREVIEW, VOICE_STYLES, effectiveStyle, pickVoiceForStyle, styleParts } from '../utils/voiceStyles.js';
 
 const STORAGE_KEY = 'rutas-gastos:speech';
 
@@ -26,7 +26,7 @@ export function useSpeechReader(segments) {
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState('idle'); // idle | playing | paused | finished
   const [allVoices, setAllVoices] = useState([]);
-  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', styleId: 'standard', ...readPrefs() }));
+  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', styleId: 'standard', tuning: {}, ...readPrefs() }));
 
   const tokenRef = useRef(0); // invalida callbacks de utterances ya cancelados
   const indexRef = useRef(0);
@@ -57,7 +57,8 @@ export function useSpeechReader(segments) {
     ...style,
     ...(style.id === 'standard' ? { voice: selectedVoice, match: 'exact' } : pickVoiceForStyle(style.id, allVoices)),
   })), [allVoices, selectedVoice]);
-  const activeStyle = styles.find((style) => style.id === prefs.styleId && style.match !== 'none') || styles[0];
+  const baseStyle = styles.find((style) => style.id === prefs.styleId && style.match !== 'none') || styles[0];
+  const activeStyle = useMemo(() => effectiveStyle(baseStyle, (prefs.tuning || {})[baseStyle.id]), [baseStyle, prefs.tuning]);
   const activeStyleRef = useRef(activeStyle);
   useEffect(() => { activeStyleRef.current = activeStyle; voiceRef.current = activeStyle.voice || selectedVoice; }, [activeStyle, selectedVoice]);
 
@@ -86,7 +87,7 @@ export function useSpeechReader(segments) {
     const speakSegment = (position) => {
       const style = activeStyleRef.current;
       const voice = voiceRef.current;
-      const parts = styleParts(style.id, list[position].text, voice);
+      const parts = styleParts(style.id, list[position].text, voice, { pitch: style.pitch, melody: style.melody });
 
       const speakPart = (partIndex) => {
         const part = parts[partIndex];
@@ -161,6 +162,22 @@ export function useSpeechReader(segments) {
     if (status === 'playing') speakFrom(indexRef.current);
   }, [speakFrom, status, voices]);
 
+  /** Ajuste fino por estilo (tono, velocidad, volumen, melodía); se guarda en este dispositivo. */
+  const setTuning = useCallback((changes) => {
+    setPrefs((current) => ({
+      ...current,
+      tuning: { ...(current.tuning || {}), [activeStyle.id]: { ...((current.tuning || {})[activeStyle.id] || {}), ...changes } },
+    }));
+  }, [activeStyle.id]);
+
+  const resetTuning = useCallback(() => {
+    setPrefs((current) => {
+      const next = { ...(current.tuning || {}) };
+      delete next[activeStyle.id];
+      return { ...current, tuning: next };
+    });
+  }, [activeStyle.id]);
+
   const setStyleId = useCallback((styleId) => {
     setPrefs((current) => ({ ...current, styleId }));
     const target = styles.find((style) => style.id === styleId);
@@ -179,7 +196,7 @@ export function useSpeechReader(segments) {
     const style = activeStyleRef.current;
     const voice = voiceRef.current;
     const token = tokenRef.current;
-    const parts = styleParts(style.id, STYLE_PREVIEW, voice);
+    const parts = styleParts(style.id, STYLE_PREVIEW, voice, { pitch: style.pitch, melody: style.melody });
     const speakPart = (partIndex) => {
       if (token !== tokenRef.current || partIndex >= parts.length) return;
       const part = parts[partIndex];
@@ -211,6 +228,9 @@ export function useSpeechReader(segments) {
     supported, status, index, total: segments.length, current: segments[index] || null,
     voices, voiceURI: selectedVoice?.voiceURI || '', rate: prefs.rate,
     styles, styleId: activeStyle.id, styleVoice: activeStyle.voice, styleMatch: activeStyle.match,
+    tuning: { pitch: activeStyle.pitch, rate: activeStyle.rate, volume: activeStyle.volume, melody: activeStyle.melody },
+    tuned: Boolean((prefs.tuning || {})[activeStyle.id] && Object.keys(prefs.tuning[activeStyle.id]).length),
+    setTuning, resetTuning,
     play, pause, stop, next, previous, repeat, jump, setRate, setVoiceURI, setStyleId, preview,
   };
 }

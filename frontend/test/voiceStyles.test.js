@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VOICE_STYLES, expandNumbers, numberToSpanish, pickVoiceForStyle, spanishToCyrillic, styleText, voiceGender } from '../src/utils/voiceStyles.js';
+import { TUNING_LIMITS, VOICE_STYLES, effectiveStyle, expandNumbers, numberToSpanish, pickVoiceForStyle, spanishToCyrillic, styleText, voiceGender } from '../src/utils/voiceStyles.js';
 
 test('numbers are spelled in Spanish', () => {
   assert.equal(numberToSpanish(0), 'cero');
@@ -135,4 +135,29 @@ test('neural (Natural/Online) Colombian voices are preferred over classic ones',
   const classic = { name: 'Microsoft Sabina - Spanish (Colombia)', lang: 'es-CO', localService: true, voiceURI: 'a' };
   const neural = { name: 'Microsoft Salome Online (Natural) - Spanish (Colombia)', lang: 'es-CO', localService: false, voiceURI: 'b' };
   assert.equal(pickVoiceForStyle('colombiana', [classic, neural]).voice, neural);
+});
+
+test('melody 0 keeps the pitch flat and a higher melody exaggerates the contour', () => {
+  const spread = (melody) => {
+    const pitches = melodicParts('Gira a la derecha, luego sigue, y llegas.', { pitch: 1, melody }).map((part) => part.pitch);
+    return Math.max(...pitches) - Math.min(...pitches);
+  };
+  assert.equal(spread(0), 0);
+  assert.ok(spread(2) > spread(1) && spread(1) > 0);
+});
+
+test('styleParts honors tuned pitch and melody overrides', () => {
+  const flat = styleParts('colombiana', 'Gira, ahora.', { lang: 'es-CO' }, { pitch: 1.3, melody: 0 });
+  assert.ok(flat.every((part) => part.pitch === 1.3));
+  assert.equal(styleParts('standard', 'Hola', null, { pitch: 1.2 })[0].pitch, 1.2);
+});
+
+test('effectiveStyle merges saved tuning and clamps it to the allowed range', () => {
+  const [, colombiana] = VOICE_STYLES;
+  const tuned = effectiveStyle(colombiana, { pitch: 5, rate: 0.1, volume: 'x', melody: 1.5 });
+  assert.equal(tuned.pitch, TUNING_LIMITS.pitch.max);
+  assert.equal(tuned.rate, TUNING_LIMITS.rate.min);
+  assert.equal(tuned.volume, colombiana.volume, 'invalid values fall back to the style default');
+  assert.equal(tuned.melody, 1.5);
+  assert.equal(effectiveStyle(colombiana).melody, 1);
 });
