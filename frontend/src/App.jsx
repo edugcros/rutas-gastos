@@ -16,7 +16,6 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  InputAdornment,
   List,
   ListItemButton,
   ListItemIcon,
