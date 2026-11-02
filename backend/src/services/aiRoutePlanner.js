@@ -101,7 +101,7 @@ export async function interpretRoutePrompt(prompt, fixedRoute = null) {
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const response = await generateWithRetry(ai, {
-    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
     contents: [
       'Interpretá las preferencias del recorrido y devolvé únicamente los campos del esquema JSON.',
       'No inventes ubicaciones ni agregues paradas que el usuario no haya pedido.',

@@ -4,7 +4,6 @@ import { CssBaseline, ThemeProvider } from '@mui/material';
 import App from './App.jsx';
 import theme from './theme.js';
 import './styles/global.css';
-import './styles/visual-system.css';
 
 // Register early. The generated worker precaches the complete production shell,
 // including the MUI/Emotion chunks emitted by Vite.
