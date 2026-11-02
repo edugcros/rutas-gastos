@@ -246,6 +246,9 @@ rutas-gastos/
 │       │   ├── AuthScreen.jsx       # Alta del perfil local
 │       │   ├── MapCanvas.jsx        # Google Maps online / polilínea local offline
 │       │   └── TripWorkspace.jsx
+│       ├── styles/
+│       │   ├── global.css
+│       │   └── visual-system.css
 │       └── App.jsx
 ├── backend/
 │   ├── src/routeServer.js           # Servicio remoto sin MongoDB
@@ -254,6 +257,12 @@ rutas-gastos/
 │   └── scripts/export-local-backup.js
 └── render.yaml
 ```
+
+### Sistema visual
+
+- `frontend/src/styles/global.css` conserva las reglas base y los selectores estructurales existentes.
+- `frontend/src/styles/visual-system.css` se carga después y concentra la capa visual de producción (tokens, jerarquía, superficies, controles y breakpoints).
+- La capa visual no contiene dependencias remotas ni cambia el árbol de componentes, los flujos, el modelo local o el contrato del servicio de planificación.
 
 ## 11. Limitaciones y próximos controles
 
