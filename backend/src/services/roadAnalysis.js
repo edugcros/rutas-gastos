@@ -74,32 +74,63 @@ const normalize = (value) => String(value ?? '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/\s+/g, ' ').trim();
 
-/** Nombres de rutas ("RN151", "Ruta Provincial 6") que aparecen en las indicaciones. */
-export function extractRoadNames(route) {
-  const haystack = [route.description, ...(route.legs || []).flatMap((leg) => leg.instructions || [])].filter(Boolean).join(' | ');
+const routeText = (route) => [route.description, ...(route.legs || []).flatMap((leg) => leg.instructions || [])].filter(Boolean).join(' | ');
+
+const roadKind = (label) => (/nacional|^r\.?\s?n/i.test(label) ? 'n' : /provincial|^r\.?\s?p/i.test(label) ? 'p' : /comunal|^r\.?\s?c/i.test(label) ? 'c' : '');
+
+/**
+ * Rutas numeradas ("RN151", "Ruta Provincial 6") y autopistas que aparecen en el
+ * trazado. La clave usa tipo + número: "RN151" y "Ruta Nacional 151" son la misma.
+ * @returns {Map<string, {label: string, kind: string, number: string}>}
+ */
+function scanRoads(route) {
   const found = new Map();
   const pattern = /\b(?:R\.?\s?N\.?|R\.?\s?P\.?|R\.?\s?C\.?|Ruta\s+(?:Nacional|Provincial|Comunal)?\s*(?:N[°ºo.]?\s*)?)\s?(\d{1,3}[A-Za-z]?)\b|\b(Autopista|Autov[ií]a)\s+([A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ.]+(?:\s+[A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ.]+)?)/g;
-  for (const match of haystack.matchAll(pattern)) {
+  for (const match of routeText(route).matchAll(pattern)) {
     const label = match[0].replace(/\s+/g, ' ').trim();
-    // "RN151" y "Ruta Nacional 151" son la misma ruta: la clave usa tipo + número.
     let key = normalize(label).replace(/[.\s]/g, '');
+    let kind = '';
+    let number = '';
     if (match[1]) {
-      const kind = /nacional|^r\.?\s?n/i.test(label) ? 'n' : /provincial|^r\.?\s?p/i.test(label) ? 'p' : /comunal|^r\.?\s?c/i.test(label) ? 'c' : '';
-      key = `ruta-${kind}${normalize(match[1])}`;
+      kind = roadKind(label);
+      number = normalize(match[1]);
+      key = `ruta-${kind}${number}`;
     }
-    if (!found.has(key)) found.set(key, label);
+    if (!found.has(key)) found.set(key, { label, kind, number });
   }
-  return [...found.values()].slice(0, 15);
+  return found;
 }
 
-/** Cruza lo que el usuario pidió evitar con lo que la ruta realmente recorre. */
+/** Nombres de rutas que aparecen en las indicaciones, sin duplicados. */
+export function extractRoadNames(route) {
+  return [...scanRoads(route).values()].map((road) => road.label).slice(0, 25);
+}
+
+/** "Ruta 40", "RN40", "ruta nacional 40", "la 40" -> { kind, number }; otros textos -> null. */
+function parseNumberedRoad(term) {
+  const text = normalize(term);
+  const named = text.match(/^(?:la\s+)?(?:r\.?\s?([npc])\.?|ruta\s*(nacional|provincial|comunal)?)\s*(?:n[°ºo.]?\s*)?(\d{1,3}[a-z]?)$/i);
+  if (named) return { kind: named[1] ? named[1].toLowerCase() : named[2] ? named[2][0].toLowerCase() : '', number: named[3] };
+  const bare = text.match(/^la\s+(\d{1,3}[a-z]?)$/);
+  return bare ? { kind: '', number: bare[1] } : null;
+}
+
+/**
+ * Cruza lo que el usuario pidió evitar con lo que la ruta realmente recorre.
+ * Las rutas numeradas se comparan por tipo y número ("Ruta 40" coincide con
+ * "RN40"); si no se indica el tipo, coincide con cualquiera de ese número.
+ * Los demás nombres (parajes, cuestas, localidades) se buscan como texto.
+ */
 export function findAvoidedRoadMatches(avoidAreas = [], route) {
-  const haystack = normalize([route.description, ...(route.legs || []).flatMap((leg) => leg.instructions || [])].join(' | '));
+  const haystack = normalize(routeText(route));
   const compact = haystack.replace(/[.\s]/g, '');
+  const roads = [...scanRoads(route).values()].filter((road) => road.number);
   return avoidAreas
     .map((area) => String(area).trim())
     .filter((area) => area.length >= 3)
     .filter((area) => {
+      const numbered = parseNumberedRoad(area);
+      if (numbered) return roads.some((road) => road.number === numbered.number && (!numbered.kind || road.kind === numbered.kind));
       const term = normalize(area);
       return haystack.includes(term) || compact.includes(term.replace(/[.\s]/g, ''));
     });
@@ -129,6 +160,7 @@ export function buildAnalysisPrompt({ intent, userPrompt, routes, now = new Date
       ? 'Usá la búsqueda web para consultar información vigente (Vialidad Nacional y provinciales, estado de rutas, cortes, obras, nevadas, crecidas, alertas) y el conocimiento sobre qué rutas son de asfalto, ripio o tierra.'
       : 'No tenés acceso a información en vivo. Basate solo en tu conocimiento general sobre qué rutas son de asfalto, ripio o tierra. NO afirmes ni inventes cortes, obras ni alertas vigentes: devolvé closures vacío y aclará en el resumen que no se pudo verificar el estado actual.',
     'REGLAS: no inventes. Si no hay evidencia suficiente para una ruta o tramo, devolvé surface "UNKNOWN" y confidence "LOW". Indicá "asOf" (fecha o período de la información) en cada corte. Si no encontraste cortes u obras vigentes, devolvé closures vacío; no afirmes que el camino está libre.',
+    'Si el usuario pidió evitar algún camino (avoidAreas) y alguna de las rutas nombradas (namedRoads) coincide, decilo explícitamente en el resumen; nunca afirmes que se evita algo que figura en namedRoads.',
     'Los caminos de tierra o ripio no son un error: si el usuario los acepta o los pide, describilos con su estado probable y recomendaciones (vehículo, clima, combustible, señal). Si pidió pavimento y la ruta tiene tramos sin asfaltar, advertilo.',
     `Recorrido: ${stops}.`,
     `Preferencias interpretadas: ${JSON.stringify({
