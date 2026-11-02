@@ -15,7 +15,7 @@ const schema = z.object({
 });
 
 function normalizeLocation(value) {
-  return value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim().replace(/\\s+/g, ' ').toLowerCase();
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 export async function planRoute(req, res) {
