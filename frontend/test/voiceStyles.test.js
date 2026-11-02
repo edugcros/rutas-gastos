@@ -161,3 +161,18 @@ test('effectiveStyle merges saved tuning and clamps it to the allowed range', ()
   assert.equal(tuned.melody, 1.5);
   assert.equal(effectiveStyle(colombiana).melody, 1);
 });
+
+test('control ranges are wide enough for a clearly audible change', () => {
+  assert.ok(TUNING_LIMITS.pitch.max - TUNING_LIMITS.pitch.min >= 1.5);
+  assert.ok(TUNING_LIMITS.rate.max / TUNING_LIMITS.rate.min >= 3);
+  assert.ok(TUNING_LIMITS.melody.max >= 5);
+  const [, colombiana] = VOICE_STYLES;
+  assert.ok(colombiana.pitch >= 1.25, 'default Colombian pitch sits in the feminine range');
+  const wild = styleParts('colombiana', 'Gira, ahora, ya.', { lang: 'es-CO' }, { pitch: 1.3, melody: 5 }).map((part) => part.pitch);
+  assert.ok(Math.max(...wild) - Math.min(...wild) > 0.3, 'maximum melody gives a very marked contour');
+});
+
+test('Colombian voice choice favors female names including newer ones', () => {
+  assert.equal(voiceGender({ name: 'Microsoft Ximena Online (Natural) - Spanish (Mexico)' }), 'f');
+  assert.equal(voiceGender({ name: 'Microsoft Mateo - Spanish' }), 'm');
+});

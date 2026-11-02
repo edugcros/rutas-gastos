@@ -30,7 +30,7 @@ const STATUS_TEXT = { idle: 'Lista para leer', playing: 'Leyendo', paused: 'En p
 export default function RoadSheetReader({ model, startSignal = 0 }) {
   const segments = useMemo(() => buildSpeechScript(model), [model]);
   const reader = useSpeechReader(segments);
-  const { supported, status, index, total, current, voices, voiceURI, rate, styles, styleId, styleVoice, styleMatch, tuning, tuned, setTuning, resetTuning, play, pause, stop, next, previous, repeat, setRate, setVoiceURI, setStyleId, preview } = reader;
+  const { supported, status, index, total, current, voices, voiceURI, rate, styles, styleId, styleVoice, styleMatch, tuning, tuned, setTuning, resetTuning, candidateVoices, setStyleVoice, play, pause, stop, next, previous, repeat, setRate, setVoiceURI, setStyleId, preview } = reader;
   const regionRef = useRef(null);
   const lastSignalRef = useRef(startSignal);
 
@@ -131,15 +131,20 @@ export default function RoadSheetReader({ model, startSignal = 0 }) {
             </AccordionSummary>
             <AccordionDetails id="afinar-voz" sx={{ pt: 0 }}>
               <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                Mové los controles y tocá "Probar voz" hasta que suene como querés. Se guarda en este dispositivo.
+                Al soltar cada control se reproduce una frase de prueba para que escuches el cambio al instante. Se guarda en este dispositivo.
               </Typography>
+              {candidateVoices.length > 1 && (
+                <TextField select size="small" fullWidth label="Voz base" value={styleVoice?.voiceURI || ''} onChange={(event) => setStyleVoice(event.target.value)} sx={{ mb: 2 }}>
+                  {candidateVoices.map((voice) => <MenuItem key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</MenuItem>)}
+                </TextField>
+              )}
               {Object.entries(TUNING_LIMITS).map(([key, limit]) => (
                 <Box key={key} sx={{ mb: 1 }}>
                   <Stack direction="row" justifyContent="space-between">
                     <Typography variant="body2" id={`tuning-${key}`}>{limit.label}</Typography>
                     <Typography variant="body2" className="tabular" color="textSecondary">{tuning[key].toFixed(2)}</Typography>
                   </Stack>
-                  <Slider size="small" min={limit.min} max={limit.max} step={limit.step} value={tuning[key]} onChange={(_, value) => setTuning({ [key]: value })} aria-labelledby={`tuning-${key}`} />
+                  <Slider size="small" min={limit.min} max={limit.max} step={limit.step} value={tuning[key]} onChange={(_, value) => setTuning({ [key]: value })} onChangeCommitted={() => window.setTimeout(preview, 80)} aria-labelledby={`tuning-${key}`} />
                 </Box>
               ))}
               <Stack direction="row" spacing={1}>

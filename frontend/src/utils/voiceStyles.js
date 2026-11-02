@@ -97,8 +97,8 @@ export function spanishToCyrillic(text) {
 
 // ---------- Elección de voz ----------
 
-const FEMALE = /(sabina|helena|elena|paulina|dalia|salom[eé]|camila|luc[ií]a|laura|mar[ií]a|m[oó]nica|sof[ií]a|valentina|paloma|elvira|marisol|esperanza|irina|svetlana|dariya|daria|milena|katya|tatyana|tatiana|anna|olga|samantha|karen|female|mujer|femenin)/i;
-const MALE = /(gonzalo|jorge|diego|pablo|ra[uú]l|carlos|[aá]lvaro|juan|pedro|andrei|dmitri|dmitry|yuri|pavel|sergei|maxim|male\b|hombre)/i;
+const FEMALE = /(ximena|marina|isabela|isabella|carolina|andrea|natalia|jimena|sabina|helena|elena|paulina|dalia|salom[eé]|camila|luc[ií]a|laura|mar[ií]a|m[oó]nica|sof[ií]a|valentina|paloma|elvira|marisol|esperanza|irina|svetlana|dariya|daria|milena|katya|tatyana|tatiana|anna|olga|samantha|karen|female|mujer|femenin)/i;
+const MALE = /(mateo|santiago|sebasti[aá]n|alejandro|gonzalo|jorge|diego|pablo|ra[uú]l|carlos|[aá]lvaro|juan|pedro|andrei|dmitri|dmitry|yuri|pavel|sergei|maxim|male\b|hombre)/i;
 
 export function voiceGender(voice) {
   const name = String(voice?.name || '');
@@ -119,7 +119,7 @@ function firstBy(voices, predicate) {
 
 export const VOICE_STYLES = [
   { id: 'standard', label: 'Estándar (voz del sistema)', description: 'Voz en español del dispositivo.', rate: 1, pitch: 1, volume: 1, pause: false },
-  { id: 'colombiana', label: 'Colombiana (Medellín) · joven, suave y natural', description: 'Voz femenina de unos 21 años: dulce, fluida y cercana, con acento paisa.', rate: 0.95, pitch: 1.12, volume: 0.9, pause: false },
+  { id: 'colombiana', label: 'Colombiana (Medellín) · joven, suave y natural', description: 'Voz femenina de unos 21 años: dulce, fluida y cercana, con acento paisa.', rate: 0.95, pitch: 1.3, volume: 0.9, pause: false },
   { id: 'rusa', label: 'Rusa · grave y sensual', description: 'Acento ruso al hablar español, lento y envolvente.', rate: 0.85, pitch: 0.82, volume: 0.95, pause: true },
 ];
 
@@ -230,10 +230,10 @@ export function styleParts(styleId, text, voice = null, overrides = {}) {
 
 /** Rangos de los controles de "Afinar voz" (también limitan lo que se guarda). */
 export const TUNING_LIMITS = {
-  pitch: { min: 0.7, max: 1.5, step: 0.01, label: 'Tono (agudo ↔ grave)' },
-  rate: { min: 0.6, max: 1.3, step: 0.01, label: 'Velocidad' },
-  volume: { min: 0.4, max: 1, step: 0.01, label: 'Suavidad (volumen)' },
-  melody: { min: 0, max: 2.5, step: 0.05, label: 'Melodía (entonación cantada)' },
+  pitch: { min: 0.5, max: 2, step: 0.01, label: 'Tono (grave ↔ agudo)' },
+  rate: { min: 0.5, max: 1.6, step: 0.01, label: 'Velocidad' },
+  volume: { min: 0.3, max: 1, step: 0.01, label: 'Suavidad (volumen)' },
+  melody: { min: 0, max: 5, step: 0.1, label: 'Melodía (entonación cantada)' },
 };
 
 /** Valores efectivos de un estilo: los del estilo más los ajustes guardados, siempre dentro de rango. */
