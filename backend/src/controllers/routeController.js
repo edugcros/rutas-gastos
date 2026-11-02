@@ -20,7 +20,7 @@ function normalizeLocation(value) {
 }
 
 // El frontend espera hasta 60 s. Este es el tiempo total del pedido; el análisis usa lo que sobre.
-const REQUEST_BUDGET_MS = Number(process.env.ROUTE_REQUEST_BUDGET_MS || 48_000);
+const REQUEST_BUDGET_MS = Number(process.env.ROUTE_REQUEST_BUDGET_MS || 54_000);
 
 export async function planRoute(req, res) {
   const startedAt = Date.now();
