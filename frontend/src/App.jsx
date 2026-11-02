@@ -463,7 +463,6 @@ export default function App() {
             </ListItemButton>
           </Tooltip>
         </List>
-        <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={importBackup} />
 
         <Box sx={{ mt: 'auto', pt: 2 }}>
           <Divider sx={{ mb: 1.5, borderColor: 'rgba(255,255,255,.14)' }} />
@@ -531,6 +530,8 @@ export default function App() {
           <ListItemText primary="Perfil" />
         </ListItemButton>
       </Paper>
+
+      <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={importBackup} />
 
       <Box
         component="main"
