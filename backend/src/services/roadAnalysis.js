@@ -36,8 +36,18 @@ const RESPONSE_SCHEMA = {
   required: ['routes'],
 };
 
-const WEB_TIMEOUT_MS = 20_000;
-const KNOWLEDGE_TIMEOUT_MS = 12_000;
+const WEB_TIMEOUT_MS = 18_000;
+// El modo sin búsqueda debe terminar siempre: con rutas largas el modelo tardó más de 12 s.
+const KNOWLEDGE_TIMEOUT_MS = 24_000;
+// Si la búsqueda web responde "sin cuota" no tiene sentido reintentarla en cada pedido:
+// se saltea durante este tiempo (ahorra latencia y llamadas fallidas).
+const WEB_BLOCK_MS = 10 * 60_000;
+let webBlockedUntil = 0;
+
+/** Solo para pruebas: restablece el bloqueo temporal de la búsqueda web. */
+export function resetAnalysisState() {
+  webBlockedUntil = 0;
+}
 
 // Los modelos devuelven null en campos vacíos y textos más largos de lo pedido:
 // se normalizan (null -> valor por defecto, recorte) en vez de descartar todo el análisis.
@@ -146,7 +156,7 @@ function compactRoute(route, index) {
     legs: (route.legs || []).map((leg, legIndex) => ({
       leg: legIndex + 1,
       distanceKm: Math.round((leg.distanceMeters || 0) / 100) / 10,
-      sampleInstructions: (leg.instructions || []).slice(0, 12).map((text) => String(text).slice(0, 140)),
+      sampleInstructions: (leg.instructions || []).slice(0, 4).map((text) => String(text).slice(0, 100)),
     })),
   };
 }
@@ -222,7 +232,7 @@ async function attempt({ client, model, intent, userPrompt, routes, now, webSear
     contents: buildAnalysisPrompt({ intent, userPrompt, routes, now, webSearch }),
     config: webSearch
       ? { tools: [{ googleSearch: {} }], temperature: 0.2 }
-      : { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.2 },
+      : { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.2, maxOutputTokens: 3000 },
   }), timeoutMs);
   const parsed = parseAnalysisText(response.text);
   if (!parsed) {
@@ -252,9 +262,12 @@ export async function analyzeRoutes({ intent, userPrompt, routes, ai, model, now
   // La búsqueda web puede no estar disponible (cuota o plan): se degrada a conocimiento general.
   // El análisis es un complemento: nunca debe impedir que el usuario reciba su ruta.
   for (const [webSearch, timeoutMs] of [[true, WEB_TIMEOUT_MS], [false, KNOWLEDGE_TIMEOUT_MS]]) {
+    if (webSearch && now.getTime() < webBlockedUntil) continue;
     try {
       return await attempt({ ...base, webSearch, timeoutMs });
     } catch (error) {
+      // 429 (cuota), 403 (sin permiso) o 400 (herramienta no admitida): la búsqueda no va a funcionar pronto.
+      if (webSearch && [429, 403, 400].includes(Number(error?.status))) webBlockedUntil = now.getTime() + WEB_BLOCK_MS;
       console.warn('[ROAD_ANALYSIS_FAILED]', JSON.stringify({ webSearch, name: error?.name || 'Error', status: error?.status ?? null, message: String(error?.message || '').slice(0, 120) }));
     }
   }
