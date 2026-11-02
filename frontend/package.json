@@ -10,14 +10,15 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@googlemaps/js-api-loader": "^2.0.2",
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
     "axios": "^1.12.2",
     "lucide-react": "^0.545.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "@mui/material": "^9.5.0",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.4",
