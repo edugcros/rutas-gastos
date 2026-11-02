@@ -28,7 +28,7 @@ export default function AuthScreen({ onAuthenticated }) {
         <div className="brand-mark"><Compass size={22} /><span>RUTAS <b>&</b> GASTOS</span></div>
         <div className="auth-hero-copy">
           <span className="eyebrow">LOCAL · PRIVADO · OFFLINE FIRST</span>
-          <h1>El viaje, bajo control.</h1>
+          <h1>El viaje, bajo control, con logistica Alfredo.</h1>
           <p>Registrá viajes, ingresos y gastos aunque no tengas conexión. La información queda guardada en esta computadora.</p>
         </div>
         <div className="auth-visual-bottom"><span>Tu espacio de trabajo no depende de un servidor.</span><span>ARGENTINA · ARS</span></div>
