@@ -36,7 +36,7 @@ function openDatabase() {
       resolve(db);
     };
     request.onerror = () => { dbPromise = null; reject(request.error || new Error('No se pudo abrir la base de datos local.')); };
-    request.onblocked = () => reject(new Error('Cerrá otras ventanas de Rutas & Gastos para actualizar el almacenamiento local.'));
+    request.onblocked = () => { dbPromise = null; reject(new Error('Cerrá otras ventanas de Rutas & Gastos para actualizar el almacenamiento local.')); };
   });
   return dbPromise;
 }
@@ -60,6 +60,11 @@ function makeId() {
   if (crypto?.randomUUID) return crypto.randomUUID();
   return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+
+const TRIP_STATUSES = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+const EXPENSE_CATEGORIES = ['FUEL', 'FOOD', 'LODGING', 'TOLLS', 'REPAIRS', 'TRANSPORT', 'VETERINARY', 'OTHER'];
+const PAYMENT_METHODS = ['CASH', 'TRANSFER', 'CARD', 'OTHER'];
+const CURRENCIES = ['ARS', 'USD'];
 
 export function toMinorUnits(value) {
   const amount = Number(value);
@@ -272,6 +277,13 @@ export async function deleteLocalTrip(tripId) {
 }
 
 export async function updateLocalTrip(tripId, data) {
+  // Validate first: an exception thrown inside an IndexedDB callback would abort
+  // the transaction and hide the real reason behind a generic message.
+  const name = data.name !== undefined ? String(data.name).trim() : undefined;
+  if (name !== undefined && (name.length < 2 || name.length > 140)) throw new Error('El nombre del viaje debe tener entre 2 y 140 caracteres.');
+  if (data.status !== undefined && !TRIP_STATUSES.includes(data.status)) throw new Error('El estado del viaje no es válido.');
+  if (data.incomeCurrency !== undefined && !CURRENCIES.includes(data.incomeCurrency)) throw new Error('La moneda no es válida.');
+  const incomeMinor = data.incomeAmount !== undefined ? toMinorUnits(data.incomeAmount) : undefined;
   const db = await openDatabase();
   const tx = db.transaction(['trips', 'expenses'], 'readwrite');
   const done = transactionDone(tx);
@@ -281,9 +293,9 @@ export async function updateLocalTrip(tripId, data) {
   request.onsuccess = () => {
     const trip = request.result;
     if (!trip) { tx.abort(); return; }
-    if (data.name !== undefined) trip.name = String(data.name).trim();
+    if (name !== undefined) trip.name = name;
     if (data.status !== undefined) trip.status = data.status;
-    if (data.incomeAmount !== undefined) trip.income.amountMinor = toMinorUnits(data.incomeAmount);
+    if (incomeMinor !== undefined) trip.income.amountMinor = incomeMinor;
     if (data.incomeCurrency !== undefined && data.incomeCurrency !== trip.income.currency) {
       const expenseCountRequest = tx.objectStore('expenses').index('tripId').count(tripId);
       expenseCountRequest.onsuccess = () => {
@@ -349,15 +361,18 @@ export async function saveLocalTripRoutes(tripId, data) {
 
 export async function createLocalExpense(tripId, data) {
   const trip = (await getLocalTrip(tripId)).trip;
+  if (data.category && !EXPENSE_CATEGORIES.includes(data.category)) throw new Error('La categoría del gasto no es válida.');
+  if (data.paymentMethod && !PAYMENT_METHODS.includes(data.paymentMethod)) throw new Error('El medio de pago no es válido.');
+  if (data.expenseDate && Number.isNaN(new Date(data.expenseDate).getTime())) throw new Error('La fecha del gasto no es válida.');
   if (data.currency !== trip.income.currency) throw new Error(`La moneda del gasto debe coincidir con la moneda del ingreso (${trip.income.currency}).`);
   const now = new Date().toISOString();
   const amountMinor = toMinorUnits(data.amount);
   if (amountMinor <= 0) throw new Error('El importe del gasto debe ser mayor que cero.');
   const expense = {
-    _id: makeId(), tripId, category: data.category || 'OTHER', description: String(data.description || '').trim(),
+    _id: makeId(), tripId, category: data.category || 'OTHER', description: String(data.description || '').trim().slice(0, 300),
     amountMinor, currency: data.currency || 'ARS', expenseDate: data.expenseDate || now,
     deductFromProfit: data.deductFromProfit !== false, paymentMethod: data.paymentMethod || 'CASH',
-    receiptReference: data.receiptReference || '', createdAt: now, updatedAt: now, storageMode: 'local',
+    receiptReference: String(data.receiptReference || '').slice(0, 200), createdAt: now, updatedAt: now, storageMode: 'local',
   };
   if (expense.description.length < 2) throw new Error('Ingresá un detalle para el gasto.');
   const db = await openDatabase();

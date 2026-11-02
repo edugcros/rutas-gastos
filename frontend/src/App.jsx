@@ -67,7 +67,7 @@ const mobileNavItemSx = {
   '& .MuiListItemText-root': { m: 0 },
   '& .MuiListItemText-primary': {
     color: 'inherit',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: 750,
     lineHeight: 1.15,
     textAlign: 'center',
@@ -108,11 +108,11 @@ function MetricCard({ label, value, icon: Icon, gradient, hint }) {
       <CardContent sx={{ position: 'relative', zIndex: 1, p: 2.2, '&:last-child': { pb: 2.2 } }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: 'rgba(255,255,255,.82)', fontSize: 11, fontWeight: 750 }}>{label}</Typography>
+            <Typography sx={{ color: 'rgba(255,255,255,.82)', fontSize: 12.5, fontWeight: 750 }}>{label}</Typography>
             <Typography sx={{ mt: 1.1, color: '#fff', fontSize: { xs: 19, sm: 22 }, lineHeight: 1.2, fontWeight: 900, letterSpacing: '-.035em', overflowWrap: 'anywhere' }}>
               {value}
             </Typography>
-            {hint && <Typography sx={{ mt: .7, color: 'rgba(255,255,255,.74)', fontSize: 9.5 }}>{hint}</Typography>}
+            {hint && <Typography sx={{ mt: .7, color: 'rgba(255,255,255,.74)', fontSize: 11 }}>{hint}</Typography>}
           </Box>
           <Box sx={{ width: 39, height: 39, flexShrink: 0, display: 'grid', placeItems: 'center', border: '1px solid rgba(255,255,255,.24)', borderRadius: 2.5, bgcolor: 'rgba(255,255,255,.15)', backdropFilter: 'blur(8px)' }}>
             <Icon size={19} />
@@ -125,7 +125,7 @@ function MetricCard({ label, value, icon: Icon, gradient, hint }) {
 
 function TripStatus({ status }) {
   const meta = statusMeta[status] || { label: status, color: 'default' };
-  return <Chip size="small" label={meta.label} color={meta.color} variant="filled" sx={{ fontSize: 10, height: 25 }} />;
+  return <Chip size="small" label={meta.label} color={meta.color} variant="filled" sx={{ fontSize: 12, height: 25 }} />;
 }
 
 export default function App() {
@@ -137,11 +137,13 @@ export default function App() {
   const [form, setForm] = useState(EMPTY_TRIP);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [savingTrip, setSavingTrip] = useState(false);
   const [deletingTripId, setDeletingTripId] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [offlineReady, setOfflineReady] = useState(() => Boolean(navigator.serviceWorker?.controller));
   const [installPrompt, setInstallPrompt] = useState(null);
   const fileInputRef = useRef(null);
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -236,14 +238,21 @@ export default function App() {
   }, []);
 
   async function loadTrips() {
+    // Only the latest request may update state, so overlapping reloads
+    // (create, delete, child refreshes) cannot overwrite newer data.
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const { data } = await http.get('/trips');
+      if (seq !== loadSeqRef.current) return;
       setTrips(data.items || []);
       setError('');
     } catch (requestError) {
+      if (seq !== loadSeqRef.current) return;
       setError(requestError.userMessage || requestError.message || 'No se pudieron cargar los viajes locales.');
-    } finally { setLoading(false); }
+    } finally {
+      if (seq === loadSeqRef.current) setLoading(false);
+    }
   }
 
   useEffect(() => { if (user) loadTrips(); }, [user]);
@@ -268,16 +277,29 @@ export default function App() {
     }));
   }
 
+  function openCreateDialog() {
+    setError('');
+    setForm(EMPTY_TRIP);
+    setCreating(true);
+  }
+
   async function createTrip(event) {
     event.preventDefault();
+    if (savingTrip) return;
     setError('');
+    const incomeAmount = Number(form.incomeAmount === '' ? 0 : form.incomeAmount);
+    if (!Number.isFinite(incomeAmount) || incomeAmount < 0) {
+      setError('Ingresá una ganancia inicial válida (cero o mayor).');
+      return;
+    }
+    setSavingTrip(true);
     try {
       const payload = {
         ...form,
         origin: form.origin.trim(),
         destination: form.destination.trim(),
         waypoints: form.waypoints.map((point) => point.trim()).filter(Boolean),
-        incomeAmount: Number(form.incomeAmount || 0),
+        incomeAmount,
         startDate: form.startDate ? new Date(`${form.startDate}T12:00:00`).toISOString() : null,
       };
       const { data } = await http.post('/trips', payload);
@@ -287,6 +309,8 @@ export default function App() {
       setSelectedTripId(data.trip._id);
     } catch (requestError) {
       setError(requestError.userMessage || requestError.message || 'No se pudo crear el viaje.');
+    } finally {
+      setSavingTrip(false);
     }
   }
 
@@ -345,7 +369,12 @@ export default function App() {
 
   async function editLocalProfile() {
     if (!window.confirm('Podés volver a configurar el nombre de este espacio. Los viajes y gastos no se eliminarán. ¿Continuar?')) return;
-    await clearLocalProfile();
+    try {
+      await clearLocalProfile();
+    } catch (profileError) {
+      setError(profileError.message || 'No se pudo editar el perfil local.');
+      return;
+    }
     setUser(null);
     setTrips([]);
     setSelectedTripId(null);
@@ -401,12 +430,12 @@ export default function App() {
           <Box sx={{ width: 39, height: 39, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 2.5, color: '#fff', border: '1px solid rgba(255,255,255,.22)', bgcolor: 'rgba(255,255,255,.13)' }}>
             <Compass size={20} />
           </Box>
-          <Typography sx={{ display: { xs: 'none', md: 'block' }, color: '#fff', fontSize: 11, fontWeight: 900, letterSpacing: 1.25 }}>
+          <Typography sx={{ display: { xs: 'none', md: 'block' }, color: '#fff', fontSize: 12.5, fontWeight: 900, letterSpacing: 1.25 }}>
             RUTAS <Box component="span" sx={{ color: '#F4B7E3' }}>&</Box> GASTOS
           </Typography>
         </Stack>
 
-        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 9, fontWeight: 850, letterSpacing: 1.25 }}>
+        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 11, fontWeight: 850, letterSpacing: 1.25 }}>
           GESTIÓN LOCAL
         </Typography>
         <List disablePadding sx={{ display: 'grid', gap: .5 }}>
@@ -417,7 +446,7 @@ export default function App() {
               sx={{
                 minHeight: 44, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#DCE3FF',
                 '& .MuiListItemIcon-root': { color: '#B9C7FF', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' },
-                '& .MuiListItemText-primary': { fontSize: 11, fontWeight: 750 },
+                '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 750 },
                 '&.Mui-selected': { color: '#fff', bgcolor: 'rgba(255,255,255,.15)', boxShadow: 'inset 3px 0 #F5B7E4' },
                 '&.Mui-selected .MuiListItemIcon-root': { color: '#fff' },
                 '&:hover': { bgcolor: 'rgba(255,255,255,.10)' },
@@ -434,7 +463,7 @@ export default function App() {
                 sx={{
                   minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#fff',
                   '& .MuiListItemIcon-root': { color: '#F7C5E8', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' },
-                  '& .MuiListItemText-primary': { fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                  '& .MuiListItemText-primary': { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
                   '&.Mui-selected': { bgcolor: 'rgba(255,255,255,.11)' },
                 }}
               >
@@ -446,18 +475,18 @@ export default function App() {
         </List>
 
         <Divider sx={{ display: { xs: 'none', md: 'block' }, my: 2.2, borderColor: 'rgba(255,255,255,.14)' }} />
-        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 9, fontWeight: 850, letterSpacing: 1.15 }}>
+        <Typography sx={{ display: { xs: 'none', md: 'block' }, px: 1.2, mb: 1, color: '#A9B5F4', fontSize: 11, fontWeight: 850, letterSpacing: 1.15 }}>
           DATOS DE ESTE EQUIPO
         </Typography>
         <List disablePadding sx={{ display: 'grid', gap: .5 }}>
           <Tooltip title="Exportar copia" placement="right">
-            <ListItemButton onClick={exportBackup} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 11, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
+            <ListItemButton onClick={exportBackup} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
               <ListItemIcon><Download size={17} /></ListItemIcon>
               <ListItemText primary="Exportar copia" sx={{ display: { xs: 'none', md: 'block' } }} />
             </ListItemButton>
           </Tooltip>
           <Tooltip title="Restaurar copia" placement="right">
-            <ListItemButton onClick={() => fileInputRef.current?.click()} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 11, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
+            <ListItemButton onClick={() => fileInputRef.current?.click()} sx={{ minHeight: 43, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12.5, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
               <ListItemIcon><Upload size={17} /></ListItemIcon>
               <ListItemText primary="Restaurar copia" sx={{ display: { xs: 'none', md: 'block' } }} />
             </ListItemButton>
@@ -471,12 +500,12 @@ export default function App() {
               {user.name?.slice(0, 1)?.toUpperCase() || 'U'}
             </Avatar>
             <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
-              <Typography sx={{ color: '#fff', fontSize: 10, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</Typography>
-              <Typography sx={{ color: '#AFBAD8', fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.organizationName}</Typography>
+              <Typography sx={{ color: '#fff', fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</Typography>
+              <Typography sx={{ color: '#AFBAD8', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.organizationName}</Typography>
             </Box>
           </Stack>
           <Tooltip title="Editar perfil local" placement="right">
-            <ListItemButton onClick={editLocalProfile} sx={{ minHeight: 41, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 10, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
+            <ListItemButton onClick={editLocalProfile} sx={{ minHeight: 41, px: { xs: 1.2, md: 1.4 }, borderRadius: 2.5, color: '#C5D0EC', '& .MuiListItemIcon-root': { color: '#B6C7F5', minWidth: { xs: 0, md: 38 }, justifyContent: 'center' }, '& .MuiListItemText-primary': { fontSize: 12, fontWeight: 650 }, '&:hover': { bgcolor: 'rgba(255,255,255,.10)', color: '#fff' } }}>
               <ListItemIcon><HardDrive size={17} /></ListItemIcon>
               <ListItemText primary="Editar perfil local" sx={{ display: { xs: 'none', md: 'block' } }} />
             </ListItemButton>
@@ -545,21 +574,21 @@ export default function App() {
         <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'rgba(255,255,255,.88)', borderBottom: '1px solid #E8EAF3', backdropFilter: 'blur(18px)' }}>
           <Toolbar sx={{ minHeight: { xs: '62px !important', md: '70px !important' }, px: { xs: 1.5, sm: 2.5, lg: 4 }, gap: 1.2, justifyContent: 'space-between' }}>
             <Stack direction="row" alignItems="center" spacing={.8} sx={{ minWidth: 0 }}>
-              <Typography sx={{ color: '#78819B', fontSize: { xs: 10, sm: 11 }, fontWeight: 650, whiteSpace: 'nowrap' }}>Workspace</Typography>
+              <Typography sx={{ color: '#78819B', fontSize: { xs: 12, sm: 12.5 }, fontWeight: 650, whiteSpace: 'nowrap' }}>Workspace</Typography>
               <ChevronRight size={14} color="#A9AEC2" />
-              <Typography noWrap sx={{ color: '#263054', fontSize: { xs: 10, sm: 12 }, fontWeight: 800, maxWidth: { xs: 90, sm: 240 } }}>
+              <Typography noWrap sx={{ color: '#263054', fontSize: { xs: 12, sm: 12 }, fontWeight: 800, maxWidth: { xs: 90, sm: 240 } }}>
                 {selected ? selected.trip.name : 'Mis viajes'}
               </Typography>
             </Stack>
             <Stack direction="row" alignItems="center" spacing={{ xs: .6, sm: 1 }}>
-              {installPrompt && <Button size="small" variant="outlined" startIcon={<Download size={14} />} onClick={installApp} sx={{ minWidth: 0, px: { xs: 1, sm: 1.5 }, fontSize: { xs: 9, sm: 11 } }}>Instalar app</Button>}
+              {installPrompt && <Button size="small" variant="outlined" startIcon={<Download size={14} />} onClick={installApp} sx={{ minWidth: 0, px: { xs: 1, sm: 1.5 }, fontSize: { xs: 11, sm: 12.5 } }}>Instalar app</Button>}
               <Tooltip title={online ? 'Con conexión' : 'Modo sin conexión'}>
                 <Chip size="small" icon={online ? <Wifi size={14} /> : <WifiOff size={14} />} label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{online ? 'Con conexión' : 'Modo sin conexión'}</Box>} color={online ? 'success' : 'warning'} variant="outlined" sx={{ '& .MuiChip-icon': { ml: 1 }, height: 31 }} />
               </Tooltip>
               <Tooltip title={offlineReady ? 'La aplicación está controlada por el Service Worker.' : 'El navegador todavía no confirmó el control offline de esta pestaña.'}>
                 <Chip size="small" icon={<HardDrive size={14} />} label={<Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>{offlineReady ? 'App offline preparada' : 'Preparando modo offline'}</Box>} color={offlineReady ? 'success' : 'warning'} variant="outlined" sx={{ '& .MuiChip-icon': { ml: 1 }, height: 31 }} />
               </Tooltip>
-              <Avatar sx={{ width: 34, height: 34, ml: .4, color: '#fff', fontSize: 11, fontWeight: 850, background: 'linear-gradient(135deg,#6675F3,#C35EA9)' }} title={user.name}>
+              <Avatar sx={{ width: 34, height: 34, ml: .4, color: '#fff', fontSize: 12.5, fontWeight: 850, background: 'linear-gradient(135deg,#6675F3,#C35EA9)' }} title={user.name}>
                 {user.name?.slice(0, 1)?.toUpperCase() || 'U'}
               </Avatar>
             </Stack>
@@ -572,11 +601,11 @@ export default function App() {
           <Box sx={{ maxWidth: 1580, mx: 'auto', px: { xs: 1.5, sm: 2.5, lg: 4 }, py: { xs: 2.5, md: 4 } }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
               <Box>
-                <Typography sx={{ color: 'primary.main', fontSize: 10, fontWeight: 850, letterSpacing: 1.35 }}>PANEL DE CONTROL · ALMACENAMIENTO LOCAL</Typography>
+                <Typography sx={{ color: 'primary.main', fontSize: 12, fontWeight: 850, letterSpacing: 1.35 }}>PANEL DE CONTROL · ALMACENAMIENTO LOCAL</Typography>
                 <Typography component="h1" sx={{ mt: .7, color: '#202744', fontSize: { xs: 27, sm: 32 }, fontWeight: 900, letterSpacing: '-.05em' }}>Mis viajes</Typography>
                 <Typography color="text.secondary" sx={{ mt: .5, fontSize: 12 }}>Organizá recorridos y mantené tus números actualizados, incluso sin Internet.</Typography>
               </Box>
-              <Button size="large" variant="contained" startIcon={<Plus size={18} />} onClick={() => setCreating(true)} sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, minHeight: 47, px: 2.3, background: 'linear-gradient(110deg,#5967E8,#825FDC 65%,#D85CA7)' }}>
+              <Button size="large" variant="contained" startIcon={<Plus size={18} />} onClick={openCreateDialog} sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, minHeight: 47, px: 2.3, background: 'linear-gradient(110deg,#5967E8,#825FDC 65%,#D85CA7)' }}>
                 Nuevo viaje
               </Button>
             </Stack>
@@ -585,7 +614,7 @@ export default function App() {
             {!online && (
               <Alert severity="warning" variant="outlined" icon={<WifiOff size={18} />} sx={{ mb: 2.5, borderRadius: 3, bgcolor: '#FFF9EB' }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 800 }}>Estás trabajando sin conexión.</Typography>
-                <Typography sx={{ fontSize: 11 }}>Los viajes, ingresos y gastos se guardan en esta computadora. La planificación con IA requiere Internet.</Typography>
+                <Typography sx={{ fontSize: 12.5 }}>Los viajes, ingresos y gastos se guardan en esta computadora. La planificación con IA requiere Internet.</Typography>
               </Alert>
             )}
 
@@ -599,7 +628,7 @@ export default function App() {
             <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.7 }}>
               <Box>
                 <Typography component="h2" sx={{ color: '#252D4C', fontSize: 17, fontWeight: 850 }}>Actividad reciente</Typography>
-                <Typography color="text.secondary" sx={{ fontSize: 11 }}>Viajes guardados en este equipo</Typography>
+                <Typography color="text.secondary" sx={{ fontSize: 12.5 }}>Viajes guardados en este equipo</Typography>
               </Box>
               <Chip label={`${trips.length} registros`} size="small" variant="outlined" sx={{ bgcolor: '#fff', borderColor: '#E0E4F1', color: '#68718D', fontWeight: 750 }} />
             </Stack>
@@ -631,16 +660,16 @@ export default function App() {
                       </Stack>
                       <ButtonBase onClick={() => setSelectedTripId(trip._id)} sx={{ width: '100%', display: 'block', textAlign: 'left', mt: 1.8, borderRadius: 2, '&:focus-visible': { outline: '3px solid rgba(89,103,232,.4)', outlineOffset: 3 } }}>
                         <Typography component="h3" sx={{ color: '#232B4A', fontSize: 15, fontWeight: 850 }}>{trip.name}</Typography>
-                        <Typography noWrap title={[trip.origin, ...(trip.waypoints || []), trip.destination].join(' → ')} sx={{ mt: .75, color: '#74809C', fontSize: 10.5, minWidth: 0 }}>
+                        <Typography noWrap title={[trip.origin, ...(trip.waypoints || []), trip.destination].join(' → ')} sx={{ mt: .75, color: '#74809C', fontSize: 12, minWidth: 0 }}>
                           {[trip.origin, ...(trip.waypoints || []), trip.destination].join('  →  ')}
                         </Typography>
                         {(trip.waypoints || []).length > 0 && (
-                          <Chip size="small" label={`${trip.waypoints.length} paradas intermedias`} sx={{ mt: .8, height: 23, color: '#5363C9', bgcolor: '#EEF0FF', fontSize: 9, fontWeight: 750 }} />
+                          <Chip size="small" label={`${trip.waypoints.length} paradas intermedias`} sx={{ mt: .8, height: 23, color: '#5363C9', bgcolor: '#EEF0FF', fontSize: 11, fontWeight: 750 }} />
                         )}
                         <Divider sx={{ my: 1.8, borderColor: '#EDF0F6' }} />
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Box>
-                            <Typography sx={{ color: '#7C849D', fontSize: 10, fontWeight: 650 }}>Ganancia disponible</Typography>
+                            <Typography sx={{ color: '#7C849D', fontSize: 12, fontWeight: 650 }}>Ganancia disponible</Typography>
                             <Typography sx={{ mt: .3, color: '#12866B', fontSize: 17, fontWeight: 900, letterSpacing: '-.025em' }}>{money(financialSummary.availableProfit, financialSummary.currency)}</Typography>
                           </Box>
                           <Box sx={{ width: 34, height: 34, display: 'grid', placeItems: 'center', color: '#6170DD', borderRadius: '50%', bgcolor: '#F0F1FF' }}>
@@ -659,7 +688,7 @@ export default function App() {
                 </Box>
                 <Typography component="h2" sx={{ mt: 2, color: '#242D4D', fontSize: 18, fontWeight: 850 }}>Tu próximo viaje empieza acá</Typography>
                 <Typography color="text.secondary" sx={{ maxWidth: 340, mt: .6, mb: 2, fontSize: 12 }}>Creá un viaje para planificar una ruta y registrar ingresos y gastos.</Typography>
-                <Button variant="contained" startIcon={<Plus size={17} />} onClick={() => setCreating(true)}>Crear primer viaje</Button>
+                <Button variant="contained" startIcon={<Plus size={17} />} onClick={openCreateDialog}>Crear primer viaje</Button>
               </Paper>
             )}
           </Box>
@@ -684,11 +713,12 @@ export default function App() {
         }}
       >
         <Box sx={{ px: 3, pt: 2.8, pb: 2.1, color: '#fff', background: 'linear-gradient(115deg,#4E5FD2,#7866DF 58%,#C35FA8)' }}>
-          <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 9, fontWeight: 850, letterSpacing: 1.3 }}>NUEVO REGISTRO LOCAL</Typography>
+          <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 11, fontWeight: 850, letterSpacing: 1.3 }}>NUEVO REGISTRO LOCAL</Typography>
           <Typography component="h2" sx={{ mt: .6, fontSize: 22, fontWeight: 900 }}>Crear viaje</Typography>
         </Box>
         <Box component="form" onSubmit={createTrip}>
           <DialogContent sx={{ display: 'grid', gap: 2, p: { xs: 2, sm: 3 }, overflowY: 'auto' }}>
+            {error && <Alert severity="error" variant="outlined" onClose={() => setError('')}>{error}</Alert>}
             <TextField fullWidth label="Nombre del viaje" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required slotProps={{ htmlInput: { minLength: 2, maxLength: 140 } }} placeholder="Ej.: Traslado de noviembre" />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.7 }}>
               <TextField fullWidth label="Origen" value={form.origin} onChange={(event) => setForm((prev) => ({ ...prev, origin: event.target.value }))} required placeholder="Ciudad o dirección" />
@@ -696,15 +726,15 @@ export default function App() {
               <Box sx={{ gridColumn: '1 / -1', p: 1.6, border: '1px solid #E3E7F3', borderRadius: 3, bgcolor: '#FAFBFF' }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
                   <Box>
-                    <Typography sx={{ color: '#303A60', fontSize: 11, fontWeight: 850 }}>Paradas intermedias</Typography>
-                    <Typography sx={{ color: '#7B849D', fontSize: 9.5 }}>Agregá las ciudades o provincias que forman parte del recorrido.</Typography>
+                    <Typography sx={{ color: '#303A60', fontSize: 12.5, fontWeight: 850 }}>Paradas intermedias</Typography>
+                    <Typography sx={{ color: '#7B849D', fontSize: 11 }}>Agregá las ciudades o provincias que forman parte del recorrido.</Typography>
                   </Box>
                   <Chip size="small" label={`${form.waypoints.length}/10`} color="primary" variant="outlined" />
                 </Stack>
                 <Stack spacing={1}>
                   {form.waypoints.map((point, index) => (
                     <Stack key={index} direction="row" alignItems="center" spacing={.8}>
-                      <Typography sx={{ width: 22, color: '#7580A0', fontSize: 10, fontWeight: 800, textAlign: 'center' }}>{index + 1}.</Typography>
+                      <Typography sx={{ width: 22, color: '#7580A0', fontSize: 12, fontWeight: 800, textAlign: 'center' }}>{index + 1}.</Typography>
                       <TextField
                         fullWidth
                         size="small"
@@ -723,7 +753,7 @@ export default function App() {
                 <Button size="small" onClick={addWaypoint} disabled={form.waypoints.length >= 10} startIcon={<Plus size={15} />} sx={{ mt: 1.2 }}>
                   Agregar parada
                 </Button>
-                <Typography sx={{ mt: .5, color: '#8790A8', fontSize: 9 }}>
+                <Typography sx={{ mt: .5, color: '#8790A8', fontSize: 11 }}>
                   El orden ingresado se respeta al calcular la ruta. Podés cargar hasta 10 paradas.
                 </Typography>
               </Box>
@@ -737,7 +767,7 @@ export default function App() {
           </DialogContent>
           <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, pt: 1, gap: 1, flexDirection: { xs: 'column', sm: 'row' }, '& > .MuiButton-root': { width: { xs: '100%', sm: 'auto' } } }}>
             <Button type="button" color="inherit" variant="outlined" onClick={() => setCreating(false)}>Cancelar</Button>
-            <Button type="submit" variant="contained" endIcon={<ChevronRight size={17} />}>Crear viaje</Button>
+            <Button type="submit" variant="contained" disabled={savingTrip} endIcon={<ChevronRight size={17} />}>{savingTrip ? 'Creando...' : 'Crear viaje'}</Button>
           </DialogActions>
         </Box>
       </Dialog>

@@ -22,7 +22,7 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origen no autorizado para el servicio de rutas.'));
+    return callback(Object.assign(new Error('Origen no autorizado para el servicio de rutas.'), { statusCode: 403, expose: true }));
   },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
