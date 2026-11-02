@@ -258,6 +258,14 @@ rutas-gastos/
 └── render.yaml
 ```
 
+### Interfaz Material UI
+
+- La interfaz de alta local, dashboard, navegación, tarjetas, planificación, finanzas, formularios y diálogos utiliza componentes reales de Material UI.
+- `frontend/src/theme.js` centraliza la paleta, tipografía, radios, estados y degradados mediante `createTheme`.
+- `frontend/src/main.jsx` registra `ThemeProvider` y `CssBaseline`; la lógica de negocio continúa separada de la presentación.
+- Material UI utiliza Emotion como motor de estilos. Los paquetes se declaran en `frontend/package.json`; luego de actualizar dependencias debe mantenerse sincronizado `frontend/package-lock.json` mediante `npm install`.
+- No se importan fuentes ni iconos externos en runtime: los iconos actuales se mantienen con Lucide y se representan dentro de los componentes MUI.
+
 ### Sistema visual
 
 - `frontend/src/styles/global.css` conserva las reglas base y los selectores estructurales existentes.
