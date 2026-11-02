@@ -160,3 +160,23 @@ test('the analysis prompt stays compact for long routes', () => {
   const prompt = buildAnalysisPrompt({ intent, userPrompt: 'x', routes: [long] });
   assert.ok(prompt.length < 6000, `prompt is ${prompt.length} chars`);
 });
+
+test('analysis gives up immediately when the request has no time left', async () => {
+  resetAnalysisState();
+  let called = false;
+  const ai = { models: { generateContent: async () => { called = true; return { text: JSON.stringify(validJson) }; } } };
+  const result = await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 't', budgetMs: 1_000 });
+  assert.equal(result, null);
+  assert.equal(called, false, 'no call is made with less than the minimum time');
+});
+
+test('analysis attempts are cut at the remaining budget instead of their own limits', async () => {
+  resetAnalysisState();
+  const started = Date.now();
+  const ai = { models: { generateContent: () => new Promise(() => {}) } }; // never answers
+  const result = await analyzeRoutes({ intent, userPrompt: 'x', routes: [route], ai, model: 't', budgetMs: 4_300, now: new Date('2026-11-02T12:00:00Z') });
+  const elapsed = Date.now() - started;
+  assert.equal(result, null);
+  assert.ok(elapsed < 6_000, `took ${elapsed} ms, expected to stop near the 4.3 s budget`);
+  resetAnalysisState();
+});
