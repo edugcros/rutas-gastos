@@ -113,7 +113,7 @@ export async function interpretRoutePrompt(prompt, fixedRoute = null) {
         'No agregues, elimines ni reordenes ninguna ubicación. Interpretá solamente preferencias como peajes, autopistas y pavimentación.',
       ] : []),
       `Solicitud del usuario: ${prompt}`,
-    ].join('\\n\\n'),
+    ].join('\n\n'),
     config: {
       responseMimeType: 'application/json',
       responseSchema: {
