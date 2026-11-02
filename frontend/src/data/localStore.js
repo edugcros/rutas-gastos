@@ -1,3 +1,5 @@
+import { normalizeRoadAnalysis } from '../utils/roadAnalysis.js';
+
 const DB_NAME = 'rutas-gastos-local';
 const DB_VERSION = 1;
 const PROFILE_KEY = 'profile';
@@ -332,6 +334,7 @@ async function getAllExpensesForTrip(tripId) {
 }
 
 export async function saveLocalTripRoutes(tripId, data) {
+  const roadAnalysis = normalizeRoadAnalysis(data.roadAnalysis);
   const origin = String(data.intent.origin || '').trim();
   const destination = String(data.intent.destination || '').trim();
   const waypoints = normalizeWaypoints(data.intent.waypoints || [], origin, destination);
@@ -350,6 +353,7 @@ export async function saveLocalTripRoutes(tripId, data) {
     trip.createdFromPrompt = data.prompt || '';
     trip.routeOptions = (data.routes || []).map((route) => ({ ...route, calculatedAt: route.calculatedAt || new Date().toISOString() }));
     trip.selectedRouteIndex = data.selectedRouteIndex ?? 0;
+    trip.roadAnalysis = roadAnalysis;
     trip.updatedAt = new Date().toISOString();
     store.put(trip);
     updatedTrip = trip;

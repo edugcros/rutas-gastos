@@ -20,15 +20,18 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Download, Fuel, Landmark, MapPinned,
+  ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Download, Fuel, Headphones, Landmark, MapPinned,
   PawPrint, Plus, Receipt, Route as RouteIcon, ShieldAlert, Sparkles, Trash2, TrendingDown, Truck, Utensils, Wallet, WifiOff, Wrench,
 } from 'lucide-react';
 import http from '../api/http.js';
 import { GOOGLE_MAPS_BROWSER_KEY_CONFIGURED, ROUTE_SERVICE_CONFIGURED } from '../config/services.js';
 import { tokens } from '../theme.js';
 import MapCanvas from './MapCanvas.jsx';
+import RoadAnalysisCard from './RoadAnalysisCard.jsx';
+import RoadSheetReader from './RoadSheetReader.jsx';
 import { EmptyState, KeyValue, Section, Stack, Stat, StatusChip } from './ui.jsx';
-import { downloadRoadSheet } from '../utils/roadSheet.js';
+import { analysisForRoute } from '../utils/roadAnalysis.js';
+import { buildRoadSheetModel, downloadRoadSheet } from '../utils/roadSheet.js';
 import { categoryLabel, dateLabel, distance, duration, expenseCategories, money } from '../utils.js';
 
 // Evaluated per form, in the user's local time zone. A module-level constant
@@ -53,6 +56,14 @@ const categoryIcons = {
   REPAIRS: Wrench, TRANSPORT: Truck, VETERINARY: PawPrint, OTHER: CircleDollarSign,
 };
 
+const PREFERENCE_CHIPS = [
+  ['Aceptar caminos de tierra', 'Acepto caminos de tierra o ripio si son transitables.'],
+  ['Solo asfalto', 'Priorizá rutas asfaltadas y evitá caminos de tierra.'],
+  ['Avisame si hay cortes', 'Avisame si hay rutas cortadas, obras o alertas en el recorrido.'],
+  ['Evitar peajes', 'Evitá peajes.'],
+  ['Voy en camioneta 4x4', 'Viajo en camioneta 4x4.'],
+];
+
 const paymentLabels = { CASH: 'Efectivo', TRANSFER: 'Transferencia', CARD: 'Tarjeta', OTHER: 'Otro' };
 
 export default function TripWorkspace({ tripId, online = navigator.onLine, onBack, onChanged }) {
@@ -69,6 +80,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   const [savingRoute, setSavingRoute] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [listenSignal, setListenSignal] = useState(0);
   const mountedRef = useRef(true);
   const promptSeededRef = useRef(false);
 
@@ -165,6 +177,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
     try {
       const { data } = await http.put(`/trips/${tripId}/routes`, {
         intent: plan.intent,
+        roadAnalysis: plan.roadAnalysis,
         prompt,
         routes: plan.routes,
         selectedRouteIndex: selectedIndex,
@@ -242,13 +255,25 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
     }
   }
 
+  // Análisis del camino de la alternativa elegida: de la consulta actual o del viaje guardado.
+  const rawAnalysis = plan ? plan.roadAnalysis : currentTrip?.roadAnalysis;
+  const routeAnalysis = useMemo(() => analysisForRoute(rawAnalysis, selectedIndex), [rawAnalysis, selectedIndex]);
+  const roadSheetModel = useMemo(
+    () => (currentTrip && activeRoute ? buildRoadSheetModel(currentTrip, activeRoute, { analysis: routeAnalysis }) : null),
+    [currentTrip, activeRoute, routeAnalysis],
+  );
+
+  function addPreference(sentence) {
+    setPrompt((current) => (current.includes(sentence) ? current : `${current.trim()} ${sentence}`.trim()));
+  }
+
   async function exportRoadSheet() {
     if (!activeRoute || exportingPdf) return;
     setExportingPdf(true);
     setError('');
     setSuccess('');
     try {
-      await downloadRoadSheet(currentTrip, activeRoute);
+      await downloadRoadSheet(currentTrip, activeRoute, { analysis: routeAnalysis });
       if (mountedRef.current) setSuccess('Hoja de ruta descargada en PDF.');
     } catch (pdfError) {
       if (mountedRef.current) setError(pdfError.message || 'No se pudo generar el PDF de la hoja de ruta.');
@@ -357,6 +382,11 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 slotProps={{ htmlInput: { minLength: 10, maxLength: 2000 } }}
                 placeholder="Ej.: Priorizá rutas asfaltadas y evitá peajes."
               />
+              <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1} aria-label="Preferencias rápidas">
+                {PREFERENCE_CHIPS.map(([label, sentence]) => (
+                  <Chip key={label} size="small" variant="outlined" label={label} onClick={() => addPreference(sentence)} clickable sx={{ bgcolor: '#fff' }} />
+                ))}
+              </Stack>
               <Button type="submit" variant="contained" size="large" fullWidth disabled={busy || !online || !ROUTE_SERVICE_CONFIGURED} endIcon={busy ? undefined : <RouteIcon size={17} />}>
                 {busy ? 'Calculando rutas…' : 'Calcular rutas'}
               </Button>
@@ -425,9 +455,11 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             )}
           </Section>
 
+          <Stack spacing={3} sx={{ minWidth: 0 }}>
           <Section title="Mapa del recorrido" subtitle="Visualización de la alternativa seleccionada" action={(
             <Stack direction="row" alignItems="center" spacing={1}>
-              <Chip size="small" variant="outlined" label={mapChip} sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />
+              <Chip size="small" variant="outlined" label={mapChip} sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
+              <Button size="small" variant="contained" startIcon={<Headphones size={15} />} onClick={() => setListenSignal((value) => value + 1)} disabled={!activeRoute} aria-label="Escuchar la hoja de ruta en voz alta">Escuchar</Button>
               <Button size="small" variant="outlined" startIcon={<Download size={15} />} onClick={exportRoadSheet} disabled={!activeRoute || exportingPdf} title={activeRoute ? 'Descargar la hoja de ruta con todas las indicaciones' : 'Calculá o guardá una ruta para descargar la hoja de ruta'}>
                 {exportingPdf ? 'Generando…' : 'Hoja de ruta PDF'}
               </Button>
@@ -468,6 +500,9 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             )}
             {activeRoute && <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>La línea representa el trazado calculado. La condición de cada tramo requiere verificación externa.</Typography>}
           </Section>
+          {activeRoute && <RoadAnalysisCard analysis={routeAnalysis} unavailable={Boolean(plan) && !plan.roadAnalysis?.available} />}
+          {roadSheetModel && <RoadSheetReader model={roadSheetModel} startSignal={listenSignal} />}
+          </Stack>
         </Box>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.6fr) minmax(300px,.8fr)' }, gap: 3, alignItems: 'start' }}>
