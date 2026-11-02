@@ -34,7 +34,7 @@ export function sanitizeUserNotes(notes = []) {
 }
 
 // Sin límite, una llamada lenta dejaba el pedido colgado más de 60 s (el frontend corta a los 60 s).
-const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 22_000);
+const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 40_000);
 
 function callWithTimeout(promise, ms) {
   let timer;
