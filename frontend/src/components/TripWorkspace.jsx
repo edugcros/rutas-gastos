@@ -90,9 +90,9 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
 
   useEffect(() => {
     if (currentTrip && !prompt) {
-      setPrompt(`Calculá la mejor ruta desde ${currentTrip.origin} hasta ${currentTrip.destination}. Mostrame alternativas si están disponibles, kilómetros, tiempo estimado y advertencias viales.`);
+      setPrompt('Calculá el recorrido respetando exactamente el orden de las ubicaciones definidas arriba. Mostrame kilómetros, tiempo estimado, indicaciones por tramo y advertencias viales.');
     }
-  }, [currentTrip?._id, currentTrip?.origin, currentTrip?.destination, prompt]);
+  }, [currentTrip?._id, currentTrip?.origin, currentTrip?.destination, currentTrip?.waypoints, prompt]);
 
   const activeRoute = displayedRoutes[selectedIndex];
   const expenses = detail?.expenses || [];
@@ -127,7 +127,14 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
     setSuccess('');
 
     try {
-      const { data } = await http.post('/routes/plan', { prompt: normalizedPrompt });
+      const { data } = await http.post('/routes/plan', {
+        prompt: normalizedPrompt,
+        route: {
+          origin: currentTrip.origin,
+          waypoints: currentTrip.waypoints || [],
+          destination: currentTrip.destination,
+        },
+      });
       setPlan(data);
       setSelectedIndex(0);
     } catch (requestError) {
@@ -236,8 +243,8 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
               <Chip size="small" label={status.label} color={status.color} sx={{ height: 22, fontSize: 9 }} />
             </Stack>
             <Typography component="h1" noWrap sx={{ mt: .3, color: '#202744', fontSize: { xs: 21, sm: 25 }, fontWeight: 900, letterSpacing: '-.04em' }}>{currentTrip.name}</Typography>
-            <Typography color="text.secondary" sx={{ fontSize: 11 }}>
-              {currentTrip.origin} <Box component="span" sx={{ color: '#8991AE', mx: .4 }}>→</Box> {currentTrip.destination}
+            <Typography color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.5 }}>
+              {[currentTrip.origin, ...(currentTrip.waypoints || []), currentTrip.destination].join('  →  ')}
             </Typography>
           </Box>
         </Stack>
@@ -320,20 +327,33 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 </Alert>
               )}
 
+              <Paper variant="outlined" sx={{ mb: 1.8, p: 1.5, borderRadius: 3, borderColor: '#E2E7F3', background: 'linear-gradient(135deg,#F9FAFF,#FFFFFF)' }}>
+                <Typography sx={{ color: '#68739A', fontSize: 9, fontWeight: 900, letterSpacing: 1.1, mb: 1 }}>RECORRIDO EN ORDEN</Typography>
+                <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap spacing={.7}>
+                  <Chip size="small" color="success" label={`Inicio · ${currentTrip.origin}`} sx={{ fontSize: 9, fontWeight: 750 }} />
+                  {(currentTrip.waypoints || []).map((point, index) => (
+                    <Chip key={`${index}-${point}`} size="small" color="primary" variant="outlined" label={`${index + 1}. ${point}`} sx={{ fontSize: 9, fontWeight: 700, bgcolor: '#fff' }} />
+                  ))}
+                  <Chip size="small" color="secondary" label={`Destino · ${currentTrip.destination}`} sx={{ fontSize: 9, fontWeight: 750 }} />
+                </Stack>
+                <Typography sx={{ mt: 1, color: '#808AA3', fontSize: 9 }}>
+                  La secuencia se envía como datos estructurados y se respeta al calcular. Gemini no modifica ni agrega ubicaciones.
+                </Typography>
+              </Paper>
               <Box component="form" onSubmit={runPlanner} sx={{ display: 'grid', gap: 1.3 }}>
                 <TextField
                   fullWidth
                   multiline
                   rows={5}
-                  label="Describí el recorrido"
+                  label="Indicaciones y preferencias"
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
                   required
-                  helperText="Podés indicar paradas, prioridades, caminos que querés evitar y preferencias."
+                  helperText="Indicá caminos a evitar, prioridad por rutas asfaltadas, peajes u otras preferencias."
                   slotProps={{
                     htmlInput: { minLength: 10, maxLength: 2000 },
                   }}
-                  placeholder="Ej.: Salgo desde Río Cuarto hacia Chos Malal, pasando por Neuquén. Priorizá rutas asfaltadas y evitá peajes..."
+                  placeholder="Ej.: Priorizá rutas asfaltadas, evitá peajes y autopistas. Necesito el tiempo y la distancia estimada..."
                 />
                 <Button type="submit" variant="contained" fullWidth disabled={busy || !online || !ROUTE_SERVICE_CONFIGURED} endIcon={busy ? undefined : <RouteIcon size={17} />} sx={{ minHeight: 48 }}>
                   {busy ? 'Interpretando y calculando...' : 'Interpretar y calcular rutas'}
@@ -414,7 +434,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 </Box>
                 <Chip size="small" label={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista offline'} color={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'success' : 'default'} variant="outlined" sx={{ fontSize: 9 }} />
               </Stack>
-              <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} online={online} />
+              <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
               {activeRoute && (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, mt: 1.5 }}>
                   <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F4F6FF', borderColor: '#E3E8FB' }}>
