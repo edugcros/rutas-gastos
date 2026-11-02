@@ -4,25 +4,15 @@ import {
   AccordionDetails,
   AccordionSummary,
   Alert,
-  Avatar,
   Box,
   Button,
-  Card,
-  CardContent,
   Checkbox,
   Chip,
   Divider,
   FormControlLabel,
   IconButton,
   InputAdornment,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   MenuItem,
-  Paper,
-  Select,
-  Stack,
   Tab,
   Tabs,
   TextField,
@@ -31,11 +21,13 @@ import {
 } from '@mui/material';
 import {
   ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Fuel, Landmark, MapPinned,
-  PawPrint, Plus, Route as RouteIcon, ShieldAlert, Trash2, Truck, Utensils, Wallet, WifiOff, Wrench,
+  PawPrint, Plus, Receipt, Route as RouteIcon, ShieldAlert, Sparkles, Trash2, TrendingDown, Truck, Utensils, Wallet, WifiOff, Wrench,
 } from 'lucide-react';
 import http from '../api/http.js';
 import { GOOGLE_MAPS_BROWSER_KEY_CONFIGURED, ROUTE_SERVICE_CONFIGURED } from '../config/services.js';
+import { tokens } from '../theme.js';
 import MapCanvas from './MapCanvas.jsx';
+import { EmptyState, KeyValue, Section, Stack, Stat, StatusChip } from './ui.jsx';
 import { categoryLabel, dateLabel, distance, duration, expenseCategories, money } from '../utils.js';
 
 // Evaluated per form, in the user's local time zone. A module-level constant
@@ -60,12 +52,7 @@ const categoryIcons = {
   REPAIRS: Wrench, TRANSPORT: Truck, VETERINARY: PawPrint, OTHER: CircleDollarSign,
 };
 
-const tripStatus = {
-  PLANNED: { label: 'PLANIFICADO', color: 'info' },
-  IN_PROGRESS: { label: 'EN CURSO', color: 'warning' },
-  COMPLETED: { label: 'COMPLETADO', color: 'success' },
-  CANCELLED: { label: 'CANCELADO', color: 'error' },
-};
+const paymentLabels = { CASH: 'Efectivo', TRANSFER: 'Transferencia', CARD: 'Tarjeta', OTHER: 'Otro' };
 
 export default function TripWorkspace({ tripId, online = navigator.onLine, onBack, onChanged }) {
   const [detail, setDetail] = useState(null);
@@ -255,433 +242,306 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
 
   if (!currentTrip) {
     return (
-      <Box sx={{ minHeight: 250, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1 }}>
-        <Box sx={{ width: 42, height: 42, display: 'grid', placeItems: 'center', borderRadius: 3, color: '#fff', background: 'linear-gradient(135deg,#5967E8,#C45FA8)' }}>
+      <Box sx={{ minHeight: 320, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1.5 }} role="status">
+        <Box sx={{ width: 44, height: 44, display: 'grid', placeItems: 'center', borderRadius: 3, color: tokens.brand, bgcolor: tokens.brandSoft }}>
           <RouteIcon size={20} />
         </Box>
-        <Typography color="text.secondary" sx={{ fontSize: 12 }}>Cargando viaje...</Typography>
+        <Typography color="textSecondary">{error || 'Cargando viaje…'}</Typography>
+        {error && <Button onClick={onBack} startIcon={<ArrowLeft size={16} />}>Volver a mis viajes</Button>}
       </Box>
     );
   }
 
-  const status = tripStatus[currentTrip.status] || { label: currentTrip.status, color: 'default' };
+  const stops = [currentTrip.origin, ...(currentTrip.waypoints || []), currentTrip.destination];
+  const currency = summary?.currency;
+  const savedRoute = currentTrip.routeOptions?.[currentTrip.selectedRouteIndex ?? 0];
+  const mapChip = online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista sin conexión';
 
   return (
-    <Box sx={{ maxWidth: 1600, mx: 'auto', px: { xs: 1.5, sm: 2.5, lg: 4 }, py: { xs: 2.5, md: 3.5 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={1.5} sx={{ mb: 2.7 }}>
-        <Stack direction="row" alignItems="center" spacing={1.4} sx={{ flex: 1, minWidth: 0 }}>
+    <Box sx={{ maxWidth: 1280, mx: 'auto', px: { xs: 2, sm: 3, lg: 5 }, py: { xs: 3, md: 4 } }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ minWidth: 0, width: '100%' }}>
           <Tooltip title="Volver a mis viajes">
-            <IconButton onClick={onBack} aria-label="Volver" sx={{ width: 42, height: 42, color: '#5967D6', bgcolor: '#fff', border: '1px solid #E5E8F3', borderRadius: 2.7, boxShadow: '0 4px 12px rgba(48,58,118,.05)' }}>
-              <ArrowLeft size={19} />
-            </IconButton>
+            <IconButton onClick={onBack} aria-label="Volver a mis viajes" sx={{ mt: 0.25, border: `1px solid ${tokens.lineStrong}`, bgcolor: '#fff' }}><ArrowLeft size={18} /></IconButton>
           </Tooltip>
           <Box sx={{ minWidth: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={.8} flexWrap="wrap">
-              <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>VIAJE</Typography>
-              <Chip size="small" label={status.label} color={status.color} sx={{ height: 22, fontSize: 11 }} />
+            <Stack direction="row" alignItems="center" spacing={1.25} flexWrap="wrap" useFlexGap>
+              <Typography component="h1" variant="h1" sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, overflowWrap: 'anywhere' }}>{currentTrip.name}</Typography>
+              <StatusChip status={currentTrip.status} />
             </Stack>
-            <Typography component="h1" noWrap sx={{ mt: .3, color: '#202744', fontSize: { xs: 21, sm: 25 }, fontWeight: 900, letterSpacing: '-.04em' }}>{currentTrip.name}</Typography>
-            <Typography color="text.secondary" sx={{ fontSize: 12.5, lineHeight: 1.5 }}>
-              {[currentTrip.origin, ...(currentTrip.waypoints || []), currentTrip.destination].join('  →  ')}
-            </Typography>
+            <Typography color="textSecondary" sx={{ mt: 0.5 }}>{stops.join(' → ')}</Typography>
           </Box>
         </Stack>
-        <Chip icon={<CalendarDays size={15} />} label={dateLabel(currentTrip.startDate)} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, bgcolor: '#fff', borderColor: '#E4E8F2', color: '#65718F', fontSize: 12, fontWeight: 750, height: 33 }} />
+        <Chip icon={<CalendarDays size={15} />} label={`Inicio: ${dateLabel(currentTrip.startDate)}`} variant="outlined" sx={{ flexShrink: 0, bgcolor: '#fff', '& .MuiChip-icon': { color: 'text.secondary', ml: 1 } }} />
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', sm: 'repeat(3,minmax(0,1fr))', lg: '1.45fr repeat(3,minmax(0,1fr))' }, gap: 1.2, mb: 2.6 }}>
-        <Card sx={{ gridColumn: { xs: '1 / -1', lg: 'auto' }, overflow: 'hidden', color: '#fff', background: 'linear-gradient(120deg,#30429C 0%,#5869E9 58%,#8B67D8 100%)', border: 0, boxShadow: '0 12px 25px rgba(72,84,188,.18)' }}>
-          <CardContent sx={{ p: 2.1, '&:last-child': { pb: 2.1 } }}>
-            <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 11, fontWeight: 850, letterSpacing: 1.2 }}>GANANCIA DISPONIBLE</Typography>
-            <Typography sx={{ mt: .8, color: '#fff', fontSize: { xs: 22, sm: 27 }, fontWeight: 900, letterSpacing: '-.04em', overflowWrap: 'anywhere' }}>{money(summary?.availableProfit, summary?.currency)}</Typography>
-            <Typography sx={{ mt: .3, color: 'rgba(255,255,255,.72)', fontSize: 11 }}>Ingreso inicial menos gastos descontados</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ background: 'linear-gradient(145deg,#FFFFFF,#F1F4FF)', borderColor: '#E1E6FA' }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Ingreso inicial</Typography>
-              <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#E4E9FF', color: '#5967DB' }}><Wallet size={16} /></Avatar>
-            </Stack>
-            <Typography sx={{ mt: 1.1, color: '#2D385D', fontSize: 15, fontWeight: 850, overflowWrap: 'anywhere' }}>{money(summary?.initialIncome, summary?.currency)}</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ background: 'linear-gradient(145deg,#FFFFFF,#FFF1F4)', borderColor: '#F3E0E7' }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Gastos descontados</Typography>
-              <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#FFE4EA', color: '#C34F6B' }}><CircleDollarSign size={16} /></Avatar>
-            </Stack>
-            <Typography sx={{ mt: 1.1, color: '#B14F67', fontSize: 15, fontWeight: 850, overflowWrap: 'anywhere' }}>− {money(summary?.deductibleExpenses, summary?.currency)}</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' }, background: 'linear-gradient(145deg,#FFFFFF,#ECFAF7)', borderColor: '#D8EFE8' }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Gastos registrados</Typography>
-              <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#DDF5ED', color: '#12866A' }}><Fuel size={16} /></Avatar>
-            </Stack>
-            <Typography sx={{ mt: 1.1, color: '#187A67', fontSize: 19, fontWeight: 900 }}>{summary?.expenseCount || 0}</Typography>
-          </CardContent>
-        </Card>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', md: 'repeat(4,minmax(0,1fr))' }, gap: { xs: 1.5, md: 2 }, mb: 3 }}>
+        <Stat featured label="Ganancia disponible" value={money(summary?.availableProfit, currency)} icon={Wallet} hint="Ingreso menos gastos descontados" sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }} />
+        <Stat label="Ingreso inicial" value={money(summary?.initialIncome, currency)} icon={CircleDollarSign} />
+        <Stat label="Gastos descontados" value={`− ${money(summary?.deductibleExpenses, currency)}`} icon={TrendingDown} tone="negative" />
+        <Stat label="Gastos registrados" value={summary?.expenseCount || 0} icon={Receipt} sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }} />
       </Box>
 
-      <Tabs
-        value={tab}
-        onChange={(_, nextTab) => setTab(nextTab)}
-        variant="fullWidth"
-        sx={{
-          width: '100%',
-          maxWidth: { xs: '100%', sm: 480 },
-          mb: 2.2,
-          borderBottom: '1px solid #E4E8F2',
-          '& .MuiTab-root': {
-            flex: 1,
-            minWidth: 0,
-            minHeight: 50,
-            px: { xs: 0.5, sm: 2 },
-            mr: 0,
-            fontSize: { xs: 11, sm: 12 },
-            whiteSpace: 'nowrap',
-          },
-          '& .MuiTab-iconWrapper': { mr: { xs: 0.5, sm: 0.8 } },
-        }}
-      >
-        <Tab value="route" icon={<MapPinned size={17} />} iconPosition="start" label="Planificación de ruta" />
+      <Tabs value={tab} onChange={(_, nextTab) => setTab(nextTab)} sx={{ mb: 3, borderBottom: `1px solid ${tokens.line}` }}>
+        <Tab value="route" icon={<MapPinned size={17} />} iconPosition="start" label="Ruta" />
         <Tab value="expenses" icon={<Wallet size={17} />} iconPosition="start" label="Ingresos y gastos" />
       </Tabs>
 
-      <Stack spacing={1.2} sx={{ mb: error || success ? 2 : 0 }}>
-        {error && <Alert severity="error" variant="filled" onClose={() => setError('')} sx={{ borderRadius: 3 }}>{error}</Alert>}
-        {success && <Alert severity="success" variant="outlined" onClose={() => setSuccess('')} sx={{ borderRadius: 3, bgcolor: '#F1FAF6' }}>{success}</Alert>}
-      </Stack>
+      {(error || success) && (
+        <Stack spacing={1.5} sx={{ mb: 3 }} aria-live="polite">
+          {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+          {success && <Alert severity="success" onClose={() => setSuccess('')}>{success}</Alert>}
+        </Stack>
+      )}
 
       {tab === 'route' ? (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(320px,.82fr) minmax(0,1.38fr)' }, gridTemplateAreas: { xs: '"controls" "map"', lg: '"controls map"' }, gap: 1.8, alignItems: 'start' }}>
-          <Card sx={{ gridArea: 'controls', minWidth: 0 }}>
-            <CardContent sx={{ p: { xs: 1.8, sm: 2.3 }, '&:last-child': { pb: { xs: 1.8, sm: 2.3 } } }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>ASISTENTE DE RUTA</Typography>
-                  <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>¿A dónde vamos?</Typography>
-                </Box>
-                <Chip size="small" label="IA + MAPS" color="secondary" variant="outlined" sx={{ bgcolor: '#FFF7FC', fontSize: 11 }} />
-              </Stack>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(340px,.8fr) minmax(0,1.4fr)' }, gap: 3, alignItems: 'start' }}>
+          <Section title="Asistente de ruta" subtitle="Indicá tus preferencias y calculá alternativas" action={<Chip size="small" icon={<Sparkles size={13} />} label="IA + Maps" sx={{ bgcolor: tokens.brandSoft, color: tokens.brand, '& .MuiChip-icon': { color: 'inherit' } }} />}>
+            {!online && (
+              <Alert severity="warning" icon={<WifiOff size={17} />} sx={{ mb: 2.5 }}>
+                <strong>Sin Internet.</strong> La planificación con IA no está disponible, pero tus rutas y gastos guardados siguen accesibles.
+              </Alert>
+            )}
+            {online && !ROUTE_SERVICE_CONFIGURED && (
+              <Alert severity="info" icon={<ShieldAlert size={17} />} sx={{ mb: 2.5 }}>
+                <strong>Servicio de rutas no configurado.</strong> La gestión local funciona; configurá el endpoint antes de compilar.
+              </Alert>
+            )}
 
-              {!online && (
-                <Alert severity="warning" icon={<WifiOff size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 12.5 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Planificación con IA no disponible sin Internet</Typography>
-                  <Typography sx={{ fontSize: 12 }}>Los viajes, gastos y rutas guardadas siguen disponibles en este equipo. Gemini y Google Routes requieren conexión.</Typography>
-                </Alert>
-              )}
-              {online && !ROUTE_SERVICE_CONFIGURED && (
-                <Alert severity="info" icon={<ShieldAlert size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 12.5 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Servicio de rutas no configurado</Typography>
-                  <Typography sx={{ fontSize: 12 }}>La gestión local está operativa. Configurá el endpoint remoto antes de compilar la aplicación.</Typography>
-                </Alert>
-              )}
+            <Typography variant="overline" color="textSecondary">Recorrido en orden</Typography>
+            <Box component="ol" sx={{ listStyle: 'none', m: 0, mt: 1, mb: 3, p: 0 }}>
+              {stops.map((point, index) => {
+                const last = index === stops.length - 1;
+                const isEnd = index === 0 || last;
+                return (
+                  <Box component="li" key={`${index}-${point}`} sx={{ display: 'flex', gap: 1.5, position: 'relative', pb: last ? 0 : 1.75 }}>
+                    {!last && <Box sx={{ position: 'absolute', left: 9.5, top: 22, bottom: 0, width: '1px', bgcolor: tokens.lineStrong }} />}
+                    <Box sx={{ width: 20, height: 20, flexShrink: 0, mt: 0.25, borderRadius: '50%', border: `2px solid ${isEnd ? tokens.brand : tokens.lineStrong}`, bgcolor: index === 0 ? tokens.brand : '#fff', zIndex: 1 }} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="caption" color="textSecondary" sx={{ display: 'block', lineHeight: 1.3 }}>{index === 0 ? 'Origen' : last ? 'Destino' : `Parada ${index}`}</Typography>
+                      <Typography sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}>{point}</Typography>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
 
-              <Paper variant="outlined" sx={{ mb: 1.8, p: 1.5, borderRadius: 3, borderColor: '#E2E7F3', background: 'linear-gradient(135deg,#F9FAFF,#FFFFFF)' }}>
-                <Typography sx={{ color: '#68739A', fontSize: 11, fontWeight: 900, letterSpacing: 1.1, mb: 1 }}>RECORRIDO EN ORDEN</Typography>
-                <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap spacing={.7}>
-                  <Chip size="small" color="success" label={`Inicio · ${currentTrip.origin}`} sx={{ fontSize: 11, fontWeight: 750 }} />
-                  {(currentTrip.waypoints || []).map((point, index) => (
-                    <Chip key={`${index}-${point}`} size="small" color="primary" variant="outlined" label={`${index + 1}. ${point}`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: '#fff' }} />
-                  ))}
-                  <Chip size="small" color="secondary" label={`Destino · ${currentTrip.destination}`} sx={{ fontSize: 11, fontWeight: 750 }} />
+            <Box component="form" onSubmit={runPlanner} sx={{ display: 'grid', gap: 2 }}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={4}
+                maxRows={10}
+                label="Indicaciones y preferencias"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                required
+                helperText="Caminos a evitar, rutas asfaltadas, peajes u otras preferencias."
+                slotProps={{ htmlInput: { minLength: 10, maxLength: 2000 } }}
+                placeholder="Ej.: Priorizá rutas asfaltadas y evitá peajes."
+              />
+              <Button type="submit" variant="contained" size="large" fullWidth disabled={busy || !online || !ROUTE_SERVICE_CONFIGURED} endIcon={busy ? undefined : <RouteIcon size={17} />}>
+                {busy ? 'Calculando rutas…' : 'Calcular rutas'}
+              </Button>
+            </Box>
+
+            {plan && (
+              <Box sx={{ mt: 3, pt: 3, borderTop: `1px solid ${tokens.line}` }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                  <Typography variant="subtitle2">Alternativas encontradas</Typography>
+                  <Chip size="small" label={`${plan.routes.length} ${plan.routes.length === 1 ? 'opción' : 'opciones'}`} variant="outlined" />
                 </Stack>
-                <Typography sx={{ mt: 1, color: '#808AA3', fontSize: 11 }}>
-                  La secuencia se envía como datos estructurados y se respeta al calcular. Gemini no modifica ni agrega ubicaciones.
-                </Typography>
-              </Paper>
-              <Box component="form" onSubmit={runPlanner} sx={{ display: 'grid', gap: 1.3 }}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={5}
-                  label="Indicaciones y preferencias"
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  required
-                  helperText="Indicá caminos a evitar, prioridad por rutas asfaltadas, peajes u otras preferencias."
-                  slotProps={{
-                    htmlInput: { minLength: 10, maxLength: 2000 },
-                  }}
-                  placeholder="Ej.: Priorizá rutas asfaltadas, evitá peajes y autopistas. Necesito el tiempo y la distancia estimada..."
-                />
-                <Button type="submit" variant="contained" fullWidth disabled={busy || !online || !ROUTE_SERVICE_CONFIGURED} endIcon={busy ? undefined : <RouteIcon size={17} />} sx={{ minHeight: 48 }}>
-                  {busy ? 'Interpretando y calculando...' : 'Interpretar y calcular rutas'}
+                <Stack spacing={1}>
+                  {plan.routes.map((route, index) => {
+                    const active = selectedIndex === index;
+                    return (
+                      <Box
+                        key={`${route.encodedPolyline.slice(0, 12)}-${index}`}
+                        component="button"
+                        type="button"
+                        onClick={() => setSelectedIndex(index)}
+                        aria-pressed={active}
+                        sx={{ width: '100%', p: 2, textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit', borderRadius: 2.5, border: `${active ? 2 : 1}px solid ${active ? tokens.brand : tokens.lineStrong}`, bgcolor: active ? tokens.brandSoft : '#fff', m: active ? 0 : '1px', transition: 'background-color .15s, border-color .15s', '&:hover': { borderColor: tokens.brand } }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                          <Typography noWrap sx={{ fontWeight: 600 }}>{route.description || `Alternativa ${index + 1}`}</Typography>
+                          {active && <Check size={18} color={tokens.brand} />}
+                        </Stack>
+                        <Stack direction="row" alignItems="baseline" spacing={2} sx={{ mt: 0.5 }}>
+                          <Typography className="tabular" sx={{ fontSize: '1.25rem', fontWeight: 700 }}>{distance(route.distanceMeters)}</Typography>
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'text.secondary' }}>
+                            <Clock3 size={14} />
+                            <Typography variant="body2" sx={{ color: 'inherit' }}>{duration(route.durationSeconds)}</Typography>
+                          </Stack>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+                <Button variant="contained" color="success" onClick={persistRoute} disabled={savingRoute} fullWidth size="large" endIcon={<Check size={17} />} sx={{ mt: 2 }}>
+                  {savingRoute ? 'Guardando…' : 'Guardar alternativa seleccionada'}
                 </Button>
               </Box>
+            )}
 
-              {plan && (
-                <Stack spacing={1.2} sx={{ mt: 2.5, pt: 2, borderTop: '1px solid #ECEFF6' }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography sx={{ color: '#273054', fontSize: 12, fontWeight: 850 }}>Alternativas encontradas</Typography>
-                    <Chip size="small" color="primary" label={`${plan.routes.length} opciones`} />
-                  </Stack>
-                  {plan.routes.map((route, index) => (
-                    <Button
-                      key={`${route.encodedPolyline.slice(0, 12)}-${index}`}
-                      variant={selectedIndex === index ? 'contained' : 'outlined'}
-                      color="primary"
-                      onClick={() => setSelectedIndex(index)}
-                      sx={{
-                        width: '100%', display: 'block', py: 1.3, px: 1.5, textAlign: 'left', borderRadius: 2.7,
-                        color: selectedIndex === index ? '#fff' : '#334061',
-                        background: selectedIndex === index ? 'linear-gradient(110deg,#5967E8,#8065DE)' : '#fff',
-                        borderColor: selectedIndex === index ? 'transparent' : '#E0E5F1',
-                      }}
-                    >
-                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                        <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 800, maxWidth: '82%', color: 'inherit' }}>{route.description || `Alternativa ${index + 1}`}</Typography>
-                        {selectedIndex === index && <Check size={16} />}
-                      </Stack>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: .8 }}>
-                        <Typography sx={{ fontSize: 16, fontWeight: 900, color: 'inherit' }}>{distance(route.distanceMeters)}</Typography>
-                        <Stack direction="row" spacing={.6} alignItems="center">
-                          <Clock3 size={13} />
-                          <Typography sx={{ fontSize: 12, color: 'inherit' }}>{duration(route.durationSeconds)}</Typography>
-                        </Stack>
-                      </Stack>
-                    </Button>
-                  ))}
-                  <Button variant="contained" color="success" onClick={persistRoute} disabled={savingRoute} fullWidth endIcon={<Check size={16} />} sx={{ mt: .5, background: 'linear-gradient(110deg,#0E947A,#39B98A)' }}>
-                    {savingRoute ? 'Guardando...' : 'Guardar alternativa seleccionada'}
-                  </Button>
-                </Stack>
-              )}
-
-              {!plan && currentTrip.routeOptions?.length > 0 && (
-                <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mt: 2.2, p: 1.5, borderRadius: 3, borderColor: '#E3E8F3', bgcolor: '#FBFCFF' }}>
-                  <Avatar variant="rounded" sx={{ width: 39, height: 39, bgcolor: '#E7EBFF', color: '#5967D9' }}><RouteIcon size={18} /></Avatar>
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography sx={{ color: '#2A3557', fontSize: 12.5, fontWeight: 850 }}>Ruta guardada</Typography>
-                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>
-                      {distance(currentTrip.routeOptions[currentTrip.selectedRouteIndex ?? 0]?.distanceMeters)} · {duration(currentTrip.routeOptions[currentTrip.selectedRouteIndex ?? 0]?.durationSeconds)}
-                    </Typography>
-                  </Box>
-                  <Button size="small" variant="outlined" onClick={() => setSelectedIndex(currentTrip.selectedRouteIndex ?? 0)}>Ver en mapa</Button>
-                </Paper>
-              )}
-
-              {(plan?.caveats?.length > 0 || (currentTrip.routeOptions?.length > 0 && !plan)) && (
-                <Alert severity="warning" variant="outlined" icon={<ShieldAlert size={17} />} sx={{ mt: 2, borderRadius: 3, bgcolor: '#FFFBF4' }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 850 }}>Información vial y seguridad</Typography>
-                  <Box component="ul" sx={{ pl: 2, my: .8, '& li': { mb: .4, fontSize: 12, lineHeight: 1.55 } }}>
-                    {(plan?.caveats || ['Pavimentación y cortes no verificados en tiempo real por esta ruta guardada.']).map((item, index) => <li key={index}>{item}</li>)}
-                  </Box>
-                  <Typography component="a" href="https://www.argentina.gob.ar/rutasnacionales" target="_blank" rel="noreferrer" sx={{ color: '#5E6FC9', fontSize: 12, fontWeight: 750, textDecoration: 'underline' }}>
-                    Consultar estado de rutas de Vialidad Nacional ↗
-                  </Typography>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card sx={{ gridArea: 'map', minWidth: 0, width: '100%' }}>
-            <CardContent sx={{ p: { xs: 1.4, sm: 2 }, '&:last-child': { pb: { xs: 1.4, sm: 2 } } }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }}>
-                <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>VISUALIZACIÓN</Typography>
-                  <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 17, fontWeight: 900 }}>Mapa del recorrido</Typography>
+            {!plan && savedRoute && (
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mt: 3, p: 2, border: `1px solid ${tokens.line}`, borderRadius: 2.5, bgcolor: tokens.surfaceMuted }}>
+                <Box sx={{ width: 36, height: 36, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 2, color: tokens.positive, bgcolor: tokens.positiveSoft }}><Check size={18} /></Box>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="subtitle2">Ruta guardada</Typography>
+                  <Typography variant="body2" color="textSecondary">{distance(savedRoute.distanceMeters)} · {duration(savedRoute.durationSeconds)}</Typography>
                 </Box>
-                <Chip size="small" label={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista offline'} color={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'success' : 'default'} variant="outlined" sx={{ fontSize: 11 }} />
+                <Button size="small" variant="outlined" onClick={() => setSelectedIndex(currentTrip.selectedRouteIndex ?? 0)}>Ver en mapa</Button>
               </Stack>
-              <Box sx={{ minWidth: 0, width: '100%', overflow: 'hidden', borderRadius: 2.5 }}>
-                <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
-              </Box>
-              {activeRoute && (
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, mt: 1.5 }}>
-                  <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F4F6FF', borderColor: '#E3E8FB' }}>
-                    <Typography sx={{ color: '#7B83A0', fontSize: 11, fontWeight: 700 }}>Distancia</Typography>
-                    <Typography sx={{ mt: .3, color: '#29345E', fontSize: 13, fontWeight: 900 }}>{distance(activeRoute.distanceMeters)}</Typography>
-                  </Paper>
-                  <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F1FAF8', borderColor: '#D9EEE8' }}>
-                    <Typography sx={{ color: '#7B83A0', fontSize: 11, fontWeight: 700 }}>Duración estimada</Typography>
-                    <Typography sx={{ mt: .3, color: '#207762', fontSize: 13, fontWeight: 900 }}>{duration(activeRoute.durationSeconds)}</Typography>
-                  </Paper>
-                  <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#FFF8EC', borderColor: '#F2E6CF' }}>
-                    <Typography sx={{ color: '#8A7C61', fontSize: 11, fontWeight: 700 }}>Calzada</Typography>
-                    <Typography sx={{ mt: .3, color: '#A07832', fontSize: 12.5, fontWeight: 850 }}>Sin verificar</Typography>
-                  </Paper>
+            )}
+
+            {(plan?.caveats?.length > 0 || (currentTrip.routeOptions?.length > 0 && !plan)) && (
+              <Alert severity="warning" icon={<ShieldAlert size={17} />} sx={{ mt: 3, alignItems: 'flex-start' }}>
+                <Typography variant="subtitle2" sx={{ color: 'inherit' }}>Información vial y seguridad</Typography>
+                <Box component="ul" sx={{ pl: 2.25, my: 0.75, '& li': { mb: 0.5, fontSize: '0.8125rem', lineHeight: 1.55 } }}>
+                  {(plan?.caveats || ['Pavimentación y cortes no verificados en tiempo real por esta ruta guardada.']).map((item, index) => <li key={index}>{item}</li>)}
                 </Box>
-              )}
-              {activeRoute?.legs?.some((leg) => leg.instructions?.length) && (
-                <Accordion disableGutters elevation={0} sx={{ mt: 1.5, border: '1px solid #E6EAF3', borderRadius: '12px !important', '&::before': { display: 'none' } }}>
-                  <AccordionSummary expandIcon={<ChevronDown size={17} />} sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 1 } }}>
-                    <Typography sx={{ color: '#53617F', fontSize: 12.5, fontWeight: 800 }}>Ver indicaciones y nombres de vías</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ pt: 0 }}>
-                    {activeRoute.optimizedIntermediateWaypointIndex?.length > 0 && (
-                      <Typography sx={{ color: '#5967C9', fontSize: 12, mb: 1 }}>
-                        Orden optimizado de paradas (índices): {activeRoute.optimizedIntermediateWaypointIndex.map((value) => value + 1).join(' → ')}
-                      </Typography>
-                    )}
-                    {activeRoute.legs.map((leg, legIndex) => (
-                      <Box key={legIndex} sx={{ mb: 1.5 }}>
-                        <Typography sx={{ color: '#33405F', fontSize: 12, fontWeight: 850 }}>Tramo {legIndex + 1}</Typography>
-                        <Box component="ol" sx={{ pl: 2.2, mt: .6, mb: 0, '& li': { color: '#687591', mb: .5, fontSize: 12, lineHeight: 1.55 } }}>
-                          {leg.instructions.map((instruction, index) => <li key={`${legIndex}-${index}`}>{instruction}</li>)}
-                        </Box>
-                      </Box>
-                    ))}
-                  </AccordionDetails>
-                </Accordion>
-              )}
-              {activeRoute && (
-                <Typography sx={{ mt: 1.2, color: '#76809B', fontSize: 11, lineHeight: 1.55 }}>
-                  La línea representa el trazado calculado. La condición de cada tramo requiere verificación externa.
+                <Typography component="a" href="https://www.argentina.gob.ar/rutasnacionales" target="_blank" rel="noreferrer" sx={{ color: 'inherit', fontSize: '0.8125rem', fontWeight: 600, textDecoration: 'underline' }}>
+                  Consultar estado de rutas de Vialidad Nacional ↗
                 </Typography>
-              )}
-            </CardContent>
-          </Card>
+              </Alert>
+            )}
+          </Section>
+
+          <Section title="Mapa del recorrido" subtitle="Visualización de la alternativa seleccionada" action={<Chip size="small" variant="outlined" label={mapChip} />}>
+            <Box sx={{ minWidth: 0, overflow: 'hidden', borderRadius: 2.5, border: `1px solid ${tokens.line}` }}>
+              <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
+            </Box>
+            {activeRoute && (
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1.5, mt: 2 }}>
+                {[['Distancia', distance(activeRoute.distanceMeters)], ['Duración estimada', duration(activeRoute.durationSeconds)], ['Calzada', 'Sin verificar']].map(([label, value]) => (
+                  <Box key={label} sx={{ p: 1.5, border: `1px solid ${tokens.line}`, borderRadius: 2.5, bgcolor: tokens.surfaceMuted }}>
+                    <Typography variant="caption" color="textSecondary">{label}</Typography>
+                    <Typography className="tabular" sx={{ mt: 0.25, fontWeight: 700, fontSize: { xs: '0.9375rem', sm: '1.0625rem' } }}>{value}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+            {activeRoute?.legs?.some((leg) => leg.instructions?.length) && (
+              <Accordion disableGutters elevation={0} sx={{ mt: 2, border: `1px solid ${tokens.line}`, borderRadius: '10px !important', overflow: 'hidden' }}>
+                <AccordionSummary expandIcon={<ChevronDown size={18} />}><Typography variant="subtitle2">Indicaciones y nombres de vías</Typography></AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  {activeRoute.optimizedIntermediateWaypointIndex?.length > 0 && (
+                    <Typography variant="body2" color="primary" sx={{ mb: 1.5 }}>
+                      Orden optimizado de paradas: {activeRoute.optimizedIntermediateWaypointIndex.map((value) => value + 1).join(' → ')}
+                    </Typography>
+                  )}
+                  {activeRoute.legs.map((leg, legIndex) => (
+                    <Box key={legIndex} sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
+                      <Typography variant="subtitle2">Tramo {legIndex + 1}</Typography>
+                      <Box component="ol" sx={{ pl: 2.5, mt: 0.75, mb: 0, '& li': { color: 'text.secondary', mb: 0.5, fontSize: '0.875rem', lineHeight: 1.55 } }}>
+                        {leg.instructions.map((instruction, index) => <li key={`${legIndex}-${index}`}>{instruction}</li>)}
+                      </Box>
+                    </Box>
+                  ))}
+                </AccordionDetails>
+              </Accordion>
+            )}
+            {activeRoute && <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>La línea representa el trazado calculado. La condición de cada tramo requiere verificación externa.</Typography>}
+          </Section>
         </Box>
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1.55fr) minmax(280px,.8fr)' }, gap: 1.8, alignItems: 'start' }}>
-          <Card>
-            <CardContent sx={{ p: { xs: 1.8, sm: 2.3 }, '&:last-child': { pb: { xs: 1.8, sm: 2.3 } } }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
-                <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>MOVIMIENTOS DEL VIAJE</Typography>
-                  <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>Registro de gastos</Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.6fr) minmax(300px,.8fr)' }, gap: 3, alignItems: 'start' }}>
+          <Section
+            title="Registro de gastos"
+            subtitle="Movimientos del viaje"
+            padded={false}
+            action={<Button size="small" variant={showExpense ? 'outlined' : 'contained'} startIcon={showExpense ? undefined : <Plus size={16} />} onClick={() => setShowExpense((value) => !value)}>{showExpense ? 'Cerrar' : 'Nuevo gasto'}</Button>}
+          >
+            {showExpense && (
+              <Box component="form" onSubmit={addExpense} sx={{ display: 'grid', gap: 2, p: { xs: 2, sm: 3 }, bgcolor: tokens.surfaceMuted, borderBottom: `1px solid ${tokens.line}` }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,minmax(0,1fr))' }, gap: 2 }}>
+                  <TextField select fullWidth label="Categoría" value={expense.category} onChange={(event) => setExpense((prev) => ({ ...prev, category: event.target.value }))}>
+                    {expenseCategories.map(([key, value]) => <MenuItem key={key} value={key}>{value}</MenuItem>)}
+                  </TextField>
+                  <TextField fullWidth type="number" label={`Importe (${currentTrip.income.currency})`} value={expense.amount} onChange={(event) => setExpense((prev) => ({ ...prev, amount: event.target.value }))} required slotProps={{ htmlInput: { min: 0.01, step: 0.01, inputMode: 'decimal' } }} placeholder="0,00" />
+                  <TextField fullWidth label="Detalle" value={expense.description} onChange={(event) => setExpense((prev) => ({ ...prev, description: event.target.value }))} required slotProps={{ htmlInput: { maxLength: 300 } }} placeholder="Ej.: carga de combustible" sx={{ gridColumn: { sm: '1 / -1' } }} />
+                  <TextField fullWidth type="date" label="Fecha" value={expense.expenseDate} onChange={(event) => setExpense((prev) => ({ ...prev, expenseDate: event.target.value }))} required slotProps={{ inputLabel: { shrink: true } }} />
+                  <TextField select fullWidth label="Medio de pago" value={expense.paymentMethod} onChange={(event) => setExpense((prev) => ({ ...prev, paymentMethod: event.target.value }))}>
+                    {Object.entries(paymentLabels).map(([key, label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}
+                  </TextField>
                 </Box>
-                <Button size="small" variant="contained" startIcon={<Plus size={16} />} onClick={() => setShowExpense((value) => !value)}>
-                  Nuevo gasto
-                </Button>
-              </Stack>
-
-              {showExpense && (
-                <Paper variant="outlined" sx={{ mb: 2, p: { xs: 1.5, sm: 2 }, borderRadius: 3, bgcolor: '#FAFBFF', borderColor: '#E3E8F3' }}>
-                  <Box component="form" onSubmit={addExpense} sx={{ display: 'grid', gap: 1.5 }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,minmax(0,1fr))' }, gap: 1.5 }}>
-                      <TextField select fullWidth label="Categoría" value={expense.category} onChange={(event) => setExpense((prev) => ({ ...prev, category: event.target.value }))}>
-                        {expenseCategories.map(([key, value]) => <MenuItem key={key} value={key}>{value}</MenuItem>)}
-                      </TextField>
-                      <TextField fullWidth type="number" label={`Importe (${currentTrip.income.currency})`} value={expense.amount} onChange={(event) => setExpense((prev) => ({ ...prev, amount: event.target.value }))} required slotProps={{ htmlInput: { min: .01, step: .01 } }} placeholder="0,00" />
-                      <TextField fullWidth label="Detalle" value={expense.description} onChange={(event) => setExpense((prev) => ({ ...prev, description: event.target.value }))} required slotProps={{ htmlInput: { maxLength: 300 } }} placeholder="Ej.: carga de combustible en estación..." sx={{ gridColumn: { sm: '1 / -1' } }} />
-                      <TextField fullWidth type="date" label="Fecha" value={expense.expenseDate} onChange={(event) => setExpense((prev) => ({ ...prev, expenseDate: event.target.value }))} required slotProps={{ inputLabel: { shrink: true } }} />
-                      <TextField select fullWidth label="Medio de pago" value={expense.paymentMethod} onChange={(event) => setExpense((prev) => ({ ...prev, paymentMethod: event.target.value }))}>
-                        <MenuItem value="CASH">Efectivo</MenuItem>
-                        <MenuItem value="TRANSFER">Transferencia</MenuItem>
-                        <MenuItem value="CARD">Tarjeta</MenuItem>
-                        <MenuItem value="OTHER">Otro</MenuItem>
-                      </TextField>
-                    </Box>
-                    <FormControlLabel
-                      control={<Checkbox checked={expense.deductFromProfit} onChange={(event) => setExpense((prev) => ({ ...prev, deductFromProfit: event.target.checked }))} />}
-                      label={<Box><Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Descontar de la ganancia</Typography><Typography color="text.secondary" sx={{ fontSize: 12 }}>Desmarcá si querés registrar el gasto sin afectar el saldo disponible.</Typography></Box>}
-                      sx={{ alignItems: 'flex-start', m: 0, p: 1.1, borderRadius: 2.5, bgcolor: '#fff', border: '1px solid #E5EAF3' }}
-                    />
-                    <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                      <Button variant="outlined" color="inherit" onClick={() => setShowExpense(false)}>Cancelar</Button>
-                      <Button type="submit" variant="contained" color="primary" disabled={savingExpense}>{savingExpense ? 'Guardando...' : 'Guardar gasto'}</Button>
-                    </Stack>
-                  </Box>
-                </Paper>
-              )}
-
-              {expenses.length ? (
-                <List disablePadding>
-                  {expenses.map((item, index) => (
-                    <Box key={item._id}>
-                      <ListItem
-                        disableGutters
-                        secondaryAction={
-                          <Tooltip title="Eliminar gasto">
-                            <IconButton edge="end" size="small" onClick={() => removeExpense(item._id)} aria-label="Eliminar gasto" sx={{ color: '#BD5366', border: '1px solid #F2DFE4', borderRadius: 2 }}>
-                              <Trash2 size={15} />
-                            </IconButton>
-                          </Tooltip>
-                        }
-                        sx={{ py: 1.5, pr: 5.5, gap: 1 }}
-                      >
-                        <ListItemAvatar sx={{ minWidth: 46 }}>
-                          <Avatar variant="rounded" sx={{ width: 39, height: 39, color: '#5D6ED1', bgcolor: '#EDF0FF', border: '1px solid #E0E6FF' }}>
-                            {(() => { const CategoryIcon = categoryIcons[item.category] || CircleDollarSign; return <CategoryIcon size={17} />; })()}
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={<Typography noWrap sx={{ color: '#2D3655', fontSize: 12.5, fontWeight: 850 }}>{item.description}</Typography>}
-                          secondary={<Typography sx={{ color: '#7D86A0', fontSize: 11 }}>{categoryLabel(item.category)} · {dateLabel(item.expenseDate)}</Typography>}
-                        />
-                        <Box sx={{ minWidth: { xs: 100, sm: 135 }, textAlign: 'right' }}>
-                          <Typography sx={{ color: '#2A3453', fontSize: 12, fontWeight: 850 }}>{money(item.amount, item.currency)}</Typography>
-                          <Typography sx={{ color: item.deductFromProfit ? '#B64E67' : '#6B7E96', fontSize: 11 }}>
-                            {item.deductFromProfit ? 'Descontado de ganancia' : 'No afecta ganancia'}
-                          </Typography>
-                        </Box>
-                      </ListItem>
-                      {index < expenses.length - 1 && <Divider sx={{ borderColor: '#EDF0F6' }} />}
-                    </Box>
-                  ))}
-                </List>
-              ) : (
-                <Paper variant="outlined" sx={{ minHeight: 220, p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderRadius: 3, borderStyle: 'dashed', borderColor: '#D8DEEF', bgcolor: '#FCFCFF' }}>
-                  <Avatar sx={{ width: 55, height: 55, mb: 1.5, color: '#fff', background: 'linear-gradient(135deg,#6C7AF0,#B66BCF)' }}>
-                    <CircleDollarSign size={25} />
-                  </Avatar>
-                  <Typography sx={{ color: '#303A5D', fontSize: 13, fontWeight: 850 }}>Todavía no hay gastos</Typography>
-                  <Typography color="text.secondary" sx={{ maxWidth: 280, mt: .5, fontSize: 12 }}>Registrá combustible, viáticos, peajes y otros movimientos.</Typography>
-                  <Button variant="outlined" size="small" startIcon={<Plus size={15} />} onClick={() => setShowExpense(true)} sx={{ mt: 1.5 }}>Agregar primer gasto</Button>
-                </Paper>
-              )}
-            </CardContent>
-          </Card>
-
-          <Stack spacing={1.8}>
-            <Card>
-              <CardContent sx={{ p: 2.2, '&:last-child': { pb: 2.2 } }}>
-                <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>RESUMEN ECONÓMICO</Typography>
-                <Typography component="h2" sx={{ mt: .4, mb: 2, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>Estado de la ganancia</Typography>
-                <Box component="form" onSubmit={saveIncome} sx={{ display: 'grid', gap: 1.2 }}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label={`Ingreso / ganancia inicial (${currentTrip.income.currency})`}
-                    value={incomeAmount}
-                    onChange={(event) => setIncomeAmount(event.target.value)}
-                    slotProps={{
-                      htmlInput: { min: 0, step: .01 },
-                      input: { startAdornment: <InputAdornment position="start">{currentTrip.income.currency === 'USD' ? 'US$' : '$'}</InputAdornment> },
-                    }}
-                  />
-                  <Button type="submit" variant="outlined" fullWidth>Actualizar ingreso</Button>
-                </Box>
-                <Divider sx={{ my: 2, borderColor: '#E9EDF5' }} />
-                <Stack spacing={1.6}>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Ingreso inicial</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.initialIncome, summary?.currency)}</Typography>
-                  </Stack>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Gastos que descuentan</Typography>
-                    <Typography sx={{ color: '#B84D65', fontSize: 12.5, fontWeight: 800 }}>− {money(summary?.deductibleExpenses, summary?.currency)}</Typography>
-                  </Stack>
-                  <Paper variant="outlined" sx={{ p: 1.6, borderRadius: 3, borderColor: '#CFE9DE', background: 'linear-gradient(135deg,#EFFAF5,#E6F7F0)' }}>
-                    <Typography sx={{ color: '#43846D', fontSize: 12, fontWeight: 800 }}>DISPONIBLE</Typography>
-                    <Typography sx={{ mt: .4, color: '#0A8060', fontSize: 23, fontWeight: 900, letterSpacing: '-.04em', overflowWrap: 'anywhere' }}>{money(summary?.availableProfit, summary?.currency)}</Typography>
-                  </Paper>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Gastos no descontados</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.nonDeductibleExpenses, summary?.currency)}</Typography>
-                  </Stack>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Total de gastos</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.totalExpenses, summary?.currency)}</Typography>
-                  </Stack>
+                <FormControlLabel
+                  control={<Checkbox checked={expense.deductFromProfit} onChange={(event) => setExpense((prev) => ({ ...prev, deductFromProfit: event.target.checked }))} />}
+                  label={<Box><Typography variant="subtitle2">Descontar de la ganancia</Typography><Typography variant="caption" color="textSecondary">Desmarcá para registrarlo sin afectar el saldo disponible.</Typography></Box>}
+                  sx={{ alignItems: 'flex-start', m: 0, p: 1.5, borderRadius: 2.5, bgcolor: '#fff', border: `1px solid ${tokens.line}` }}
+                />
+                <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                  <Button variant="outlined" onClick={() => setShowExpense(false)}>Cancelar</Button>
+                  <Button type="submit" variant="contained" disabled={savingExpense}>{savingExpense ? 'Guardando…' : 'Guardar gasto'}</Button>
                 </Stack>
-                <Alert severity="info" variant="outlined" sx={{ mt: 2, borderRadius: 2.5, fontSize: 12, '& .MuiAlert-icon': { fontSize: 17 } }}>
-                  El ingreso original no se modifica al cargar gastos. El saldo se calcula automáticamente a partir de los movimientos marcados para descuento.
-                </Alert>
-                {Object.entries(groupedExpenses).some(([currency]) => currency !== (summary?.currency || 'ARS')) && (
-                  <Alert severity="warning" sx={{ mt: 1.2, borderRadius: 2.5, fontSize: 12 }}>
-                    Hay gastos en otra moneda. No se convierten automáticamente.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Stack>
+              </Box>
+            )}
+
+            {expenses.length ? (
+              <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+                {expenses.map((item) => {
+                  const CategoryIcon = categoryIcons[item.category] || CircleDollarSign;
+                  return (
+                    <Stack component="li" key={item._id} direction="row" alignItems="center" spacing={2} sx={{ px: { xs: 2, sm: 3 }, py: 1.75, '&:not(:last-of-type)': { borderBottom: `1px solid ${tokens.line}` }, '&:hover': { bgcolor: tokens.surfaceMuted } }}>
+                      <Box sx={{ width: 40, height: 40, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 2.5, color: tokens.inkMuted, bgcolor: '#F2F4F7' }}><CategoryIcon size={18} /></Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography noWrap sx={{ fontWeight: 600 }}>{item.description}</Typography>
+                        <Typography variant="caption" color="textSecondary" noWrap sx={{ display: 'block' }}>
+                          {categoryLabel(item.category)} · {dateLabel(item.expenseDate)} · {paymentLabels[item.paymentMethod] || 'Otro'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                        <Typography className="tabular" sx={{ fontWeight: 700 }}>{money(item.amount, item.currency)}</Typography>
+                        <Typography variant="caption" sx={{ color: item.deductFromProfit ? 'error.main' : 'text.secondary' }}>{item.deductFromProfit ? 'Descuenta' : 'No descuenta'}</Typography>
+                      </Box>
+                      <Tooltip title="Eliminar gasto">
+                        <IconButton onClick={() => removeExpense(item._id)} aria-label={`Eliminar gasto ${item.description}`} size="small" sx={{ '&:hover': { color: 'error.main', bgcolor: tokens.negativeSoft } }}><Trash2 size={16} /></IconButton>
+                      </Tooltip>
+                    </Stack>
+                  );
+                })}
+              </Box>
+            ) : (
+              <EmptyState icon={Receipt} title="Todavía no hay gastos" description="Registrá combustible, viáticos, peajes y otros movimientos del viaje." action={<Button variant="outlined" startIcon={<Plus size={16} />} onClick={() => setShowExpense(true)}>Agregar primer gasto</Button>} />
+            )}
+          </Section>
+
+          <Section title="Estado de la ganancia" subtitle="Resumen económico del viaje">
+            <Box component="form" onSubmit={saveIncome} sx={{ display: 'grid', gap: 1.5 }}>
+              <TextField
+                fullWidth
+                type="number"
+                label={`Ingreso inicial (${currentTrip.income.currency})`}
+                value={incomeAmount}
+                onChange={(event) => setIncomeAmount(event.target.value)}
+                slotProps={{
+                  htmlInput: { min: 0, step: 0.01, inputMode: 'decimal' },
+                  input: { startAdornment: <InputAdornment position="start">{currentTrip.income.currency === 'USD' ? 'US$' : '$'}</InputAdornment> },
+                }}
+              />
+              <Button type="submit" variant="outlined" fullWidth>Actualizar ingreso</Button>
+            </Box>
+            <Divider sx={{ my: 2.5 }} />
+            <Stack spacing={1.75}>
+              <KeyValue label="Ingreso inicial" value={money(summary?.initialIncome, currency)} />
+              <KeyValue label="Gastos que descuentan" value={`− ${money(summary?.deductibleExpenses, currency)}`} tone="negative" />
+              <Divider />
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+                <Typography variant="subtitle2">Disponible</Typography>
+                <Typography className="tabular" sx={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: (summary?.availableProfit ?? 0) < 0 ? 'error.main' : 'success.main' }}>{money(summary?.availableProfit, currency)}</Typography>
+              </Stack>
+              <Divider />
+              <KeyValue label="Gastos que no descuentan" value={money(summary?.nonDeductibleExpenses, currency)} />
+              <KeyValue label="Total de gastos" value={money(summary?.totalExpenses, currency)} />
+            </Stack>
+            <Alert severity="info" sx={{ mt: 2.5, alignItems: 'flex-start' }}>
+              El ingreso original no cambia al cargar gastos: el saldo se calcula con los movimientos marcados para descuento.
+            </Alert>
+            {summary?.mixedCurrencyWarning && (
+              <Alert severity="warning" sx={{ mt: 1.5 }}>Hay gastos en otra moneda. No se convierten automáticamente.</Alert>
+            )}
+          </Section>
         </Box>
       )}
     </Box>
