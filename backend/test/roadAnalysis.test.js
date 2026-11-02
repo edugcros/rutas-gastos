@@ -53,6 +53,17 @@ test('coerces unknown enum values instead of discarding the analysis', () => {
   assert.equal(parsed.routes[0].closures[0].status, 'RISK');
 });
 
+test('tolerates nulls, oversized text and string indexes from the model', () => {
+  const messy = { routes: [{ routeIndex: '0', summary: 'x'.repeat(900), unpavedLikelihood: null, segments: [{ road: 'RN151', surface: 'PAVED', confidence: 'HIGH', note: null }, null, { note: 'sin nombre' }], closures: null, recommendations: ['ok', null, '  '] }] };
+  const parsed = parseAnalysisText(JSON.stringify(messy));
+  assert.equal(parsed.routes[0].routeIndex, 0);
+  assert.equal(parsed.routes[0].summary.length, 600);
+  assert.equal(parsed.routes[0].unpavedLikelihood, 'UNKNOWN');
+  assert.deepEqual(parsed.routes[0].segments.map((segment) => segment.road), ['RN151']);
+  assert.deepEqual(parsed.routes[0].closures, []);
+  assert.deepEqual(parsed.routes[0].recommendations, ['ok']);
+});
+
 test('rejects malformed or empty output', () => {
   assert.equal(parseAnalysisText('no json here'), null);
   assert.equal(parseAnalysisText('{"routes": []}'), null);

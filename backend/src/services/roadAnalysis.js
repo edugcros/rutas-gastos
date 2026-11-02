@@ -13,30 +13,59 @@ import { z } from 'zod';
  */
 
 const MAX_ROUTES = 3;
+// Esquema para el modo sin búsqueda (permite salida JSON estructurada, que no se puede combinar con googleSearch).
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    routes: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          routeIndex: { type: 'INTEGER' },
+          summary: { type: 'STRING' },
+          unpavedLikelihood: { type: 'STRING' },
+          segments: { type: 'ARRAY', items: { type: 'OBJECT', properties: { road: { type: 'STRING' }, surface: { type: 'STRING' }, confidence: { type: 'STRING' }, note: { type: 'STRING' } }, required: ['road', 'surface', 'confidence'] } },
+          closures: { type: 'ARRAY', items: { type: 'OBJECT', properties: { road: { type: 'STRING' }, status: { type: 'STRING' }, description: { type: 'STRING' }, asOf: { type: 'STRING' } }, required: ['road', 'status', 'description'] } },
+          recommendations: { type: 'ARRAY', items: { type: 'STRING' } },
+        },
+        required: ['routeIndex', 'summary', 'unpavedLikelihood'],
+      },
+    },
+  },
+  required: ['routes'],
+};
+
 const WEB_TIMEOUT_MS = 20_000;
 const KNOWLEDGE_TIMEOUT_MS = 12_000;
 
+// Los modelos devuelven null en campos vacíos y textos más largos de lo pedido:
+// se normalizan (null -> valor por defecto, recorte) en vez de descartar todo el análisis.
+const nullToUndefined = (value) => (value == null ? undefined : value);
+const str = (max, fallback = '') => z.preprocess(nullToUndefined, z.string().default(fallback)).transform((value) => value.trim().slice(0, max));
+const list = (item, max) => z.preprocess((value) => (Array.isArray(value) ? value : []), z.array(item)).transform((items) => items.slice(0, max));
+
 const segmentSchema = z.object({
-  road: z.string().trim().min(1).max(120),
+  road: str(120).refine((value) => value.length > 0),
   surface: z.enum(['PAVED', 'GRAVEL', 'DIRT', 'MIXED', 'UNKNOWN']).catch('UNKNOWN'),
   confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).catch('LOW'),
-  note: z.string().trim().max(300).default(''),
+  note: str(300),
 });
 
 const closureSchema = z.object({
-  road: z.string().trim().min(1).max(120),
+  road: str(120).refine((value) => value.length > 0),
   status: z.enum(['CLOSED', 'PARTIAL', 'WORKS', 'RISK']).catch('RISK'),
-  description: z.string().trim().min(1).max(400),
-  asOf: z.string().trim().max(60).default(''),
+  description: str(400).refine((value) => value.length > 0),
+  asOf: str(60),
 });
 
 const routeAnalysisSchema = z.object({
-  routeIndex: z.number().int().min(0).max(MAX_ROUTES - 1),
-  summary: z.string().trim().min(1).max(600),
+  routeIndex: z.coerce.number().int().min(0).max(MAX_ROUTES - 1),
+  summary: str(600).refine((value) => value.length > 0),
   unpavedLikelihood: z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']).catch('UNKNOWN'),
-  segments: z.array(segmentSchema).max(12).default([]),
-  closures: z.array(closureSchema).max(8).default([]),
-  recommendations: z.array(z.string().trim().min(1).max(300)).max(6).default([]),
+  segments: list(segmentSchema.or(z.any().transform(() => null)), 12).transform((items) => items.filter(Boolean)),
+  closures: list(closureSchema.or(z.any().transform(() => null)), 8).transform((items) => items.filter(Boolean)),
+  recommendations: list(z.any(), 6).transform((items) => items.map((item) => String(item ?? '').trim().slice(0, 300)).filter(Boolean)),
 });
 
 const analysisSchema = z.object({ routes: z.array(routeAnalysisSchema).min(1).max(MAX_ROUTES) });
@@ -159,10 +188,16 @@ async function attempt({ client, model, intent, userPrompt, routes, now, webSear
   const response = await withTimeout(client.models.generateContent({
     model,
     contents: buildAnalysisPrompt({ intent, userPrompt, routes, now, webSearch }),
-    config: { ...(webSearch ? { tools: [{ googleSearch: {} }] } : {}), temperature: 0.2 },
+    config: webSearch
+      ? { tools: [{ googleSearch: {} }], temperature: 0.2 }
+      : { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.2 },
   }), timeoutMs);
   const parsed = parseAnalysisText(response.text);
-  if (!parsed) throw new Error('ANALYSIS_UNPARSEABLE');
+  if (!parsed) {
+    // Solo se registra el inicio de la respuesta, para diagnosticar el formato sin volcar contenido.
+    console.warn('[ROAD_ANALYSIS_UNPARSEABLE]', JSON.stringify({ webSearch, head: String(response.text ?? '').slice(0, 160) }));
+    throw new Error('ANALYSIS_UNPARSEABLE');
+  }
   const sources = webSearch ? extractSources(response) : [];
   return {
     routes: webSearch ? parsed.routes : parsed.routes.map((entry) => ({ ...entry, closures: [] })),
