@@ -76,7 +76,26 @@ function fromMinorUnits(value) {
 function presentTrip(trip) {
   const income = { ...trip.income, amount: fromMinorUnits(trip.income?.amountMinor) };
   delete income.amountMinor;
-  return { ...trip, income };
+  return { ...trip, waypoints: Array.isArray(trip.waypoints) ? trip.waypoints : [], income };
+}
+
+function normalizeWaypoints(value, origin, destination) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new Error('El recorrido admite hasta 10 paradas intermedias.');
+  }
+
+  const waypoints = value.map((point) => String(point || '').trim());
+  if (waypoints.some((point) => point.length < 2 || point.length > 180)) {
+    throw new Error('Cada parada debe tener entre 2 y 180 caracteres.');
+  }
+
+  const normalize = (point) => point.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, ' ').toLowerCase();
+  const locations = [origin, ...waypoints, destination].map(normalize);
+  if (new Set(locations).size !== locations.length) {
+    throw new Error('El origen, el destino y las paradas deben ser ubicaciones diferentes.');
+  }
+  return waypoints;
 }
 
 function presentExpense(expense) {
@@ -180,12 +199,19 @@ export async function listLocalTrips() {
 
 export async function createLocalTrip(data) {
   const now = new Date().toISOString();
+  const name = String(data.name || '').trim();
+  const origin = String(data.origin || '').trim();
+  const destination = String(data.destination || '').trim();
+  if (!name || name.length < 2 || !origin || !destination) {
+    throw new Error('Completá el nombre, origen y destino del viaje.');
+  }
+  const waypoints = normalizeWaypoints(data.waypoints, origin, destination);
   const trip = {
     _id: makeId(),
-    name: String(data.name || '').trim(),
-    origin: String(data.origin || '').trim(),
-    destination: String(data.destination || '').trim(),
-    waypoints: Array.isArray(data.waypoints) ? data.waypoints : [],
+    name,
+    origin,
+    destination,
+    waypoints,
     startDate: data.startDate || null,
     endDate: data.endDate || null,
     status: 'PLANNED',
@@ -201,7 +227,6 @@ export async function createLocalTrip(data) {
     updatedAt: now,
     storageMode: 'local',
   };
-  if (!trip.name || trip.name.length < 2 || !trip.origin || !trip.destination) throw new Error('Completá el nombre, origen y destino del viaje.');
   const db = await openDatabase();
   const tx = db.transaction('trips', 'readwrite');
   const done = transactionDone(tx);
@@ -304,9 +329,9 @@ export async function saveLocalTripRoutes(tripId, data) {
   request.onsuccess = () => {
     const trip = request.result;
     if (!trip) { tx.abort(); return; }
-    trip.origin = data.intent.origin;
-    trip.destination = data.intent.destination;
-    trip.waypoints = data.intent.waypoints || [];
+    trip.origin = String(data.intent.origin || '').trim();
+    trip.destination = String(data.intent.destination || '').trim();
+    trip.waypoints = normalizeWaypoints(data.intent.waypoints || [], trip.origin, trip.destination);
     trip.createdFromPrompt = data.prompt || '';
     trip.routeOptions = (data.routes || []).map((route) => ({ ...route, calculatedAt: route.calculatedAt || new Date().toISOString() }));
     trip.selectedRouteIndex = data.selectedRouteIndex ?? 0;
@@ -379,6 +404,7 @@ export async function restoreLocalBackup(backup) {
     }
     if (!['ARS', 'USD'].includes(trip.income.currency)) throw new Error('La copia contiene una moneda no admitida.');
     if (typeof trip.name !== 'string' || typeof trip.origin !== 'string' || typeof trip.destination !== 'string') throw new Error('La copia contiene datos de viaje incompletos.');
+    if (trip.waypoints !== undefined) normalizeWaypoints(trip.waypoints, trip.origin, trip.destination);
     tripIds.add(trip._id);
   }
   for (const expense of backup.expenses) {
