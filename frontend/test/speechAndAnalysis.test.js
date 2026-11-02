@@ -79,6 +79,15 @@ test('road sheet model carries labels for the PDF and extra caveat when analyzed
   assert.equal(buildRoadSheetModel(trip, route).condition, null);
 });
 
+test('knowledge-only analysis is flagged in the card model, PDF model and spoken script', () => {
+  const knowledge = { ...rawAnalysis, mode: 'knowledge', routes: [{ ...rawAnalysis.routes[0], closures: [] }] };
+  const model = buildRoadSheetModel(trip, route, { analysis: analysisForRoute(knowledge, 0) });
+  assert.equal(analysisForRoute(knowledge, 0).mode, 'knowledge');
+  assert.equal(model.condition.liveData, false);
+  assert.match(buildSpeechScript(model).find((segment) => segment.kind === 'condition').text, /no fueron verificados/);
+  assert.equal(analysisForRoute(rawAnalysis, 0).mode, 'web');
+});
+
 test('voices are ranked es-AR first and non-Spanish voices are excluded', () => {
   const ranked = rankSpanishVoices([
     { name: 'English', lang: 'en-US' }, { name: 'España', lang: 'es-ES', localService: true },

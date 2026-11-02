@@ -54,6 +54,8 @@ export function normalizeRoadAnalysis(value) {
       .filter((source) => /^https?:\/\//i.test(source.uri)),
     generatedAt: text(value.generatedAt, 40),
     grounded: Boolean(value.grounded),
+    // "knowledge": sin búsqueda web; los cortes vigentes no se verificaron.
+    mode: value.mode === 'knowledge' ? 'knowledge' : 'web',
   };
   return JSON.stringify(normalized).length > MAX_STORED_CHARS ? null : normalized;
 }
@@ -65,7 +67,7 @@ export function analysisForRoute(analysis, routeIndex) {
   const entry = normalized.routes.find((item) => item.routeIndex === routeIndex) || null;
   const warnings = normalized.avoidWarnings.filter((warning) => warning.routeIndex === routeIndex).map((warning) => warning.message);
   if (!entry && !warnings.length) return null;
-  return { ...(entry || { routeIndex, summary: '', unpavedLikelihood: 'UNKNOWN', segments: [], closures: [], recommendations: [] }), avoidWarnings: warnings, sources: normalized.sources, generatedAt: normalized.generatedAt, grounded: normalized.grounded };
+  return { ...(entry || { routeIndex, summary: '', unpavedLikelihood: 'UNKNOWN', segments: [], closures: [], recommendations: [] }), avoidWarnings: warnings, sources: normalized.sources, generatedAt: normalized.generatedAt, grounded: normalized.grounded, mode: normalized.mode };
 }
 
 export function formatGeneratedAt(value) {

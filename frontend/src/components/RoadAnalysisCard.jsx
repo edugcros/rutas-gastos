@@ -27,10 +27,13 @@ export default function RoadAnalysisCard({ analysis, unavailable = false }) {
   return (
     <Section
       title="Estado del camino"
-      subtitle={asOf ? `Análisis con IA y búsqueda web · ${asOf}` : 'Análisis con IA y búsqueda web'}
+      subtitle={`${analysis.mode === 'knowledge' ? 'Análisis con IA' : 'Análisis con IA y búsqueda web'}${asOf ? ` · ${asOf}` : ''}`}
       action={<Chip size="small" icon={<Sparkles size={13} />} label="Orientativo" sx={{ bgcolor: tokens.brandSoft, color: tokens.brand, '& .MuiChip-icon': { color: 'inherit' } }} />}
     >
       <Stack spacing={2}>
+        {analysis.mode === 'knowledge' && (
+          <Alert severity="info">Sin búsqueda en vivo: el tipo de camino se estimó con conocimiento general y los cortes, obras y alertas <strong>no fueron verificados</strong>. Consultá a Vialidad antes de salir.</Alert>
+        )}
         {analysis.avoidWarnings.map((message) => <Alert key={message} severity="error">{message}</Alert>)}
 
         <Box>
