@@ -3,11 +3,14 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './styles/global.css';
 
+// Register early. The generated worker precaches the complete production shell,
+// not just index.html, so a later cold start can load while offline.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.error('No se pudo registrar el modo offline:', error);
-    });
+  navigator.serviceWorker.register('/sw.js', {
+    scope: '/',
+    updateViaCache: 'none',
+  }).catch((error) => {
+    console.error('No se pudo registrar el modo offline:', error);
   });
 }
 

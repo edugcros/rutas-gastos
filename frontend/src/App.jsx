@@ -22,6 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [deletingTripId, setDeletingTripId] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [offlineReady, setOfflineReady] = useState(() => Boolean(navigator.serviceWorker?.controller));
   const [installPrompt, setInstallPrompt] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -46,6 +47,15 @@ export default function App() {
       window.removeEventListener('offline', offlineHandler);
       window.removeEventListener('beforeinstallprompt', installHandler);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+    const refreshOfflineReady = () => setOfflineReady(Boolean(navigator.serviceWorker.controller));
+    navigator.serviceWorker.addEventListener('controllerchange', refreshOfflineReady);
+    navigator.serviceWorker.ready.then(refreshOfflineReady).catch(() => setOfflineReady(false));
+    refreshOfflineReady();
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', refreshOfflineReady);
   }, []);
 
   async function loadTrips() {
@@ -155,7 +165,9 @@ export default function App() {
           <div className="topbar-right">
             {installPrompt && <button className="utility-button" onClick={installApp}><Download size={14} />Instalar app</button>}
             <span className={`connection-status ${online ? 'is-online' : 'is-offline'}`}>{online ? <Wifi size={14} /> : <WifiOff size={14} />}{online ? 'Con conexión' : 'Modo sin conexión'}</span>
-            <span className="local-status"><HardDrive size={13} /> Datos en este equipo</span>
+            <span className={`local-status ${offlineReady ? 'offline-ready' : 'offline-pending'}`} title={offlineReady ? 'La aplicación está controlada por el Service Worker.' : 'El navegador todavía no confirmó el control offline de esta pestaña.'}>
+              <HardDrive size={13} /> {offlineReady ? 'App offline preparada' : 'Preparando modo offline'}
+            </span>
             <button className="user-avatar" title={user.name}>{user.name?.slice(0, 1)?.toUpperCase() || 'U'}</button>
           </div>
         </header>

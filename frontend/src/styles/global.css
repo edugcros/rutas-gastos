@@ -376,3 +376,6 @@ textarea { resize: vertical; line-height: 1.6; }
 .local-mode-info span { display: flex; flex-direction: column; gap: 2px; }
 .local-mode-info strong { color: #34465c; font-size: 10px; }
 .local-mode-info small { color: #8492a4; font-size: 9px; }
+
+.local-status.offline-ready { color: #12805c; border-color: #ccebdc; background: #f2fbf6; }
+.local-status.offline-pending { color: #9a6700; border-color: #f5dfad; background: #fffaf0; }
