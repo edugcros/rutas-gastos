@@ -185,12 +185,15 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
     else if (origin || destination) mapRef.current.setCenter({ lat: -34.6037, lng: -64.0 });
   }, [routes, selectedIndex, origin, destination, mapReady, googleAvailable, canLoadGoogleMaps]);
 
-  const showLocalSketch = !canLoadGoogleMaps || Boolean(error) || !googleAvailable;
+  // Mientras la API carga, mantenemos visible el contenedor para que Google Maps
+  // pueda medirlo. Si se oculta con display:none durante la inicialización, el mapa
+  // puede quedar en blanco al mostrarse posteriormente.
+  const showLocalSketch = !canLoadGoogleMaps || Boolean(error);
   return (
     <div className="map-shell">
       <div ref={elementRef} className={`map-canvas ${showLocalSketch ? 'map-canvas-hidden' : ''}`} />
       {showLocalSketch && <OfflineRouteSketch routes={routes} selectedIndex={selectedIndex} origin={origin} destination={destination} online={online} />}
-      {showLocalSketch && online && mapLoading && <div className="map-online-hint">Conectando con Google Maps…</div>}
+      {canLoadGoogleMaps && mapLoading && <div className="map-loading" role="status">Conectando con Google Maps…</div>}
       {showLocalSketch && online && !hasKey && <div className="map-online-hint"><AlertTriangle size={14} />Configurá VITE_GOOGLE_MAPS_BROWSER_KEY en Vercel para mostrar la cartografía de Google.</div>}
       {showLocalSketch && online && error && <div className="map-online-hint"><AlertTriangle size={14} />{error}</div>}
     </div>
