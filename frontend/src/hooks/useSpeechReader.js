@@ -11,6 +11,12 @@ function writePrefs(prefs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch { /* preferencia opcional */ }
 }
 
+// Si la persona eligió una voz base para el estilo y sigue instalada, manda sobre la elegida automáticamente.
+function withChosenVoice(picked, allVoices, chosenURI) {
+  const chosen = chosenURI ? allVoices.find((voice) => voice.voiceURI === chosenURI) : null;
+  return chosen ? { voice: chosen, match: 'exact' } : picked;
+}
+
 export const isSpeechSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
 
 /**
@@ -26,7 +32,7 @@ export function useSpeechReader(segments) {
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState('idle'); // idle | playing | paused | finished
   const [allVoices, setAllVoices] = useState([]);
-  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', styleId: 'standard', tuning: {}, ...readPrefs() }));
+  const [prefs, setPrefs] = useState(() => ({ rate: 1, voiceURI: '', styleId: 'standard', tuning: {}, styleVoices: {}, ...readPrefs() }));
 
   const tokenRef = useRef(0); // invalida callbacks de utterances ya cancelados
   const indexRef = useRef(0);
@@ -55,8 +61,8 @@ export function useSpeechReader(segments) {
   // Disponibilidad de cada estilo según las voces instaladas en este dispositivo.
   const styles = useMemo(() => VOICE_STYLES.map((style) => ({
     ...style,
-    ...(style.id === 'standard' ? { voice: selectedVoice, match: 'exact' } : pickVoiceForStyle(style.id, allVoices)),
-  })), [allVoices, selectedVoice]);
+    ...(style.id === 'standard' ? { voice: selectedVoice, match: 'exact' } : withChosenVoice(pickVoiceForStyle(style.id, allVoices), allVoices, (prefs.styleVoices || {})[style.id])),
+  })), [allVoices, selectedVoice, prefs.styleVoices]);
   const baseStyle = styles.find((style) => style.id === prefs.styleId && style.match !== 'none') || styles[0];
   const activeStyle = useMemo(() => effectiveStyle(baseStyle, (prefs.tuning || {})[baseStyle.id]), [baseStyle, prefs.tuning]);
   const activeStyleRef = useRef(activeStyle);
@@ -178,6 +184,21 @@ export function useSpeechReader(segments) {
     });
   }, [activeStyle.id]);
 
+  /** Voz base elegida a mano para el estilo activo (por ejemplo Helena en vez de Laura). */
+  const setStyleVoice = useCallback((voiceURI) => {
+    setPrefs((current) => ({ ...current, styleVoices: { ...(current.styleVoices || {}), [activeStyle.id]: voiceURI } }));
+    const chosen = allVoices.find((voice) => voice.voiceURI === voiceURI);
+    if (chosen) voiceRef.current = chosen;
+    if (status === 'playing') speakFrom(indexRef.current);
+  }, [activeStyle.id, allVoices, speakFrom, status]);
+
+  // Voces entre las que se puede elegir como base del estilo activo.
+  const candidateVoices = useMemo(() => {
+    if (activeStyle.id === 'rusa') return allVoices.filter((voice) => /^ru/i.test(voice.lang));
+    if (activeStyle.id === 'colombiana') return rankSpanishVoices(allVoices);
+    return [];
+  }, [activeStyle.id, allVoices]);
+
   const setStyleId = useCallback((styleId) => {
     setPrefs((current) => ({ ...current, styleId }));
     const target = styles.find((style) => style.id === styleId);
@@ -230,7 +251,7 @@ export function useSpeechReader(segments) {
     styles, styleId: activeStyle.id, styleVoice: activeStyle.voice, styleMatch: activeStyle.match,
     tuning: { pitch: activeStyle.pitch, rate: activeStyle.rate, volume: activeStyle.volume, melody: activeStyle.melody },
     tuned: Boolean((prefs.tuning || {})[activeStyle.id] && Object.keys(prefs.tuning[activeStyle.id]).length),
-    setTuning, resetTuning,
+    setTuning, resetTuning, candidateVoices, setStyleVoice,
     play, pause, stop, next, previous, repeat, jump, setRate, setVoiceURI, setStyleId, preview,
   };
 }
