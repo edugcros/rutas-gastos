@@ -38,6 +38,7 @@ export default function App() {
   useEffect(() => {
     let active = true;
     let currentController = null;
+    let connectivityTimeoutId = null;
 
     // navigator.onLine only reports the network interface state. A same-origin
     // no-store request also verifies that this browser can actually reach the app.
@@ -45,14 +46,20 @@ export default function App() {
       if (!navigator.onLine) {
         currentController?.abort();
         currentController = null;
+        if (connectivityTimeoutId !== null) {
+          window.clearTimeout(connectivityTimeoutId);
+          connectivityTimeoutId = null;
+        }
         if (active) setOnline(false);
         return;
       }
 
       currentController?.abort();
+      if (connectivityTimeoutId !== null) window.clearTimeout(connectivityTimeoutId);
       const controller = new AbortController();
       currentController = controller;
       const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+      connectivityTimeoutId = timeoutId;
 
       try {
         const response = await fetch(`/connectivity.txt?probe=${Date.now()}`, {
@@ -68,6 +75,7 @@ export default function App() {
         if (active && currentController === controller) setOnline(false);
       } finally {
         window.clearTimeout(timeoutId);
+        if (connectivityTimeoutId === timeoutId) connectivityTimeoutId = null;
         if (currentController === controller) currentController = null;
       }
     };
@@ -89,7 +97,10 @@ export default function App() {
     return () => {
       active = false;
       currentController?.abort();
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (connectivityTimeoutId !== null) {
+        window.clearTimeout(connectivityTimeoutId);
+        connectivityTimeoutId = null;
+      }
       window.clearInterval(probeInterval);
       window.removeEventListener('online', onlineHandler);
       window.removeEventListener('offline', offlineHandler);
