@@ -39,6 +39,17 @@ test('detects roads the user asked to avoid, tolerating accents and spacing', ()
   assert.deepEqual(findAvoidedRoadMatches(['ab', ''], withRoute40), [], 'too-short terms are ignored');
 });
 
+test('matches numbered roads by type and number, not by text', () => {
+  const live = { description: 'RN151 y RN143', legs: [{ instructions: ['Continúa por RN143/RP10', 'Continúa por RN40', 'Incorpórate a RP165'] }] };
+  assert.deepEqual(findAvoidedRoadMatches(['Ruta 40'], live), ['Ruta 40']);
+  assert.deepEqual(findAvoidedRoadMatches(['ruta nacional 40', 'RN 40', 'la 40'], live).length, 3);
+  assert.deepEqual(findAvoidedRoadMatches(['Ruta Provincial 40'], live), [], 'RP40 is not RN40');
+  assert.deepEqual(findAvoidedRoadMatches(['Ruta 41', 'RN4'], live), [], 'similar numbers do not match');
+  assert.deepEqual(findAvoidedRoadMatches(['Ruta 10'], live), ['Ruta 10'], 'bare number matches any type (RP10)');
+  assert.deepEqual(findAvoidedRoadMatches(['Ruta Provincial 10'], live), ['Ruta Provincial 10']);
+  assert.deepEqual(findAvoidedRoadMatches(['Cuesta de Miranda'], { description: '', legs: [{ instructions: ['Pasá por la Cuesta de Miranda'] }] }), ['Cuesta de Miranda']);
+});
+
 test('parses model output wrapped in a code fence or surrounded by prose', () => {
   assert.equal(parseAnalysisText('```json\n' + JSON.stringify(validJson) + '\n```').routes[0].summary, 'Mayormente asfalto.');
   assert.equal(parseAnalysisText('Aquí está: ' + JSON.stringify(validJson) + ' Listo.').routes.length, 1);
