@@ -43,7 +43,9 @@ export async function computeGoogleRoutes(intent) {
     fieldMask.push('routes.optimizedIntermediateWaypointIndex');
   }
 
-  const response = await fetch(ROUTES_URL, {
+  let response;
+  try {
+    response = await fetch(ROUTES_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -52,7 +54,19 @@ export async function computeGoogleRoutes(intent) {
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
-  });
+    });
+  } catch (error) {
+    // Network failures and timeouts would otherwise surface as an opaque 500.
+    const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+    throw new HttpError(
+      timedOut ? 504 : 502,
+      timedOut
+        ? 'Google Routes tardó demasiado en responder. Volvé a intentar.'
+        : 'No se pudo conectar con Google Routes. Volvé a intentar en unos momentos.',
+      undefined,
+      { code: timedOut ? 'ROUTES_PROVIDER_TIMEOUT' : 'ROUTES_PROVIDER_UNREACHABLE', retryable: true, expose: true },
+    );
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

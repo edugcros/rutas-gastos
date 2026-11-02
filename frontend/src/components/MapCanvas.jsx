@@ -55,10 +55,15 @@ function OfflineRouteSketch({ routes, selectedIndex, origin, destination, online
     if (points.length < 2) return null;
     const meanLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length;
     const adjusted = points.map((point) => ({ x: point.lng * Math.cos((meanLat * Math.PI) / 180), y: -point.lat }));
-    const minX = Math.min(...adjusted.map((p) => p.x));
-    const maxX = Math.max(...adjusted.map((p) => p.x));
-    const minY = Math.min(...adjusted.map((p) => p.y));
-    const maxY = Math.max(...adjusted.map((p) => p.y));
+    // Plain loop: spreading tens of thousands of points into Math.min/max
+    // throws RangeError on long routes.
+    let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity;
+    for (const p of adjusted) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
     const width = Math.max(maxX - minX, 0.00001);
     const height = Math.max(maxY - minY, 0.00001);
     const pad = 70;
@@ -116,6 +121,11 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
   // La cartografía base debe mostrarse aunque todavía no haya una ruta calculada.
   // El cálculo de rutas y la visualización del mapa son capacidades independientes.
   const canLoadGoogleMaps = Boolean(online && hasKey);
+
+  useEffect(() => () => {
+    overlaysRef.current.forEach((overlay) => overlay.setMap(null));
+    overlaysRef.current = [];
+  }, []);
 
   useEffect(() => {
     let mounted = true;
