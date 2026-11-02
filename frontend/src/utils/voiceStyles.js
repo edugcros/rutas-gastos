@@ -116,7 +116,7 @@ function firstBy(voices, predicate) {
 
 export const VOICE_STYLES = [
   { id: 'standard', label: 'Estándar (voz del sistema)', description: 'Voz en español del dispositivo.', rate: 1, pitch: 1, volume: 1, pause: false },
-  { id: 'colombiana', label: 'Colombiana · femenina, cálida y sensual', description: 'Acento colombiano, más lenta, grave y suave.', rate: 0.88, pitch: 0.92, volume: 0.95, pause: true },
+  { id: 'colombiana', label: 'Colombiana (Medellín) · femenina, cálida y sensual', description: 'Acento paisa: melodiosa, pausada y envolvente.', rate: 0.9, pitch: 0.98, volume: 1, pause: true },
   { id: 'rusa', label: 'Rusa · grave y sensual', description: 'Acento ruso al hablar español, lento y envolvente.', rate: 0.85, pitch: 0.82, volume: 0.95, pause: true },
 ];
 
@@ -150,4 +150,78 @@ export function styleText(styleId, text) {
   return base;
 }
 
-export const STYLE_PREVIEW = 'Hola, soy tu guía. Seguí conmigo por la ruta, con calma, hasta llegar a destino.';
+// ---------- Acento paisa (Medellín) ----------
+
+/**
+ * Las voces de España pronuncian z/ce/ci como "th". El español colombiano es seseante:
+ * se escribe con "s" para que cualquier voz hispana lea con fonética latinoamericana.
+ */
+export function seseo(text) {
+  return String(text ?? '')
+    .replace(/z/g, 's').replace(/Z/g, 'S')
+    .replace(/c(?=[eiéí])/g, 's').replace(/C(?=[eiéí])/g, 'S');
+}
+
+// Imperativos frecuentes de las indicaciones, de tuteo a voseo ("Gira" -> "Girá"), como se dice en Medellín.
+const VOSEO = {
+  gira: 'girá', continúa: 'continuá', toma: 'tomá', mantente: 'mantenete', incorpórate: 'incorporate',
+  dirígete: 'dirigite', sigue: 'seguí', cruza: 'cruzá', entra: 'entrá', conduce: 'conducí', sube: 'subí',
+  dobla: 'doblá', avanza: 'avanzá', haz: 'hacé', sal: 'salí', ve: 'andá', pasa: 'pasá', mira: 'mirá',
+};
+const VOSEO_PATTERN = new RegExp(String.raw`(?<![\p{L}])(${Object.keys(VOSEO).join('|')})(?![\p{L}])`, 'giu');
+
+export function voseo(text) {
+  return String(text ?? '').replace(VOSEO_PATTERN, (match) => {
+    const replacement = VOSEO[match.toLowerCase()];
+    return match[0] === match[0].toUpperCase() ? replacement[0].toUpperCase() + replacement.slice(1) : replacement;
+  });
+}
+
+/** Parte el texto en frases y estas en tramos cortos por comas, conservando la puntuación. */
+export function splitPhrases(text) {
+  return String(text ?? '')
+    .split(/(?<=[.!?…])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .map((sentence) => sentence.split(/(?<=[,;:])\s+/).map((phrase) => phrase.trim()).filter(Boolean));
+}
+
+/**
+ * Curva melódica: los tramos que continúan suben un poco y alternan (cadencia
+ * cantada), y el último de cada frase baja y se alarga, como cierra una paisa.
+ * Las preguntas cierran subiendo.
+ */
+const RISES = [0.07, 0.03, 0.09, 0.04];
+
+export function melodicParts(text, { pitch = 1, rate = 1 } = {}) {
+  const parts = [];
+  splitPhrases(text).forEach((phrases) => {
+    phrases.forEach((phrase, position) => {
+      const last = position === phrases.length - 1;
+      const question = /\?$/.test(phrase);
+      parts.push({
+        text: last && !question ? phrase.replace(/\.$/, '...') : phrase,
+        pitch: Math.min(2, Math.max(0.1, last ? (question ? pitch + 0.08 : pitch - 0.07) : pitch + RISES[position % RISES.length])),
+        rateFactor: last ? 0.92 : 1.02,
+      });
+    });
+  });
+  return parts;
+}
+
+const needsSeseo = (voice) => /^es-es$/i.test(String(voice?.lang || '').replace('_', '-'));
+
+/**
+ * Lo que se pronuncia para un segmento: lista de tramos con su propio tono y velocidad.
+ * @returns {{text: string, pitch: number, rateFactor: number}[]}
+ */
+export function styleParts(styleId, text, voice = null) {
+  const style = VOICE_STYLES.find((item) => item.id === styleId) || VOICE_STYLES[0];
+  if (styleId === 'colombiana') {
+    const phonetic = needsSeseo(voice) ? seseo(voseo(text)) : voseo(text);
+    return melodicParts(phonetic, { pitch: style.pitch });
+  }
+  return [{ text: styleText(styleId, text), pitch: style.pitch, rateFactor: 1 }];
+}
+
+export const STYLE_PREVIEW = 'Hola, mi vida, soy tu guía. Seguí conmigo por la ruta, con calma, que nos vamos despacito hasta llegar a destino.';

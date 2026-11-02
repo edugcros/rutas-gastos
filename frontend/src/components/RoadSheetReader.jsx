@@ -11,8 +11,10 @@ function styleHelp(styleId, match, voice, styles) {
   if (styleId === 'standard') return undefined;
   const name = voice ? `${voice.name} (${voice.lang})` : '';
   if (match === 'approx') {
-    const wanted = styleId === 'colombiana' ? 'una voz femenina colombiana' : 'una voz femenina rusa';
-    return `Aproximada: no hay ${wanted} instalada. Se usa ${name}. Instalá más voces en los ajustes de idioma del sistema.`;
+    if (styleId === 'colombiana') {
+      return `Aproximada: no hay una voz de Colombia instalada. Se usa ${name} con pronunciación latinoamericana, voseo paisa y entonación cantada. Para el acento real, instalá la voz "Salomé (Colombia)".`;
+    }
+    return `Aproximada: no hay una voz femenina rusa instalada. Se usa ${name}. Instalá más voces en los ajustes de idioma del sistema.`;
   }
   return `Voz: ${name}`;
 }

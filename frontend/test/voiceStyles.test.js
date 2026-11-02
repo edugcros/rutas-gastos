@@ -83,3 +83,47 @@ test('styles define slower, softer delivery than standard', () => {
   assert.ok(colombiana.rate < 1 && rusa.rate < 1);
   assert.ok(colombiana.pitch < 1 && rusa.pitch < colombiana.pitch);
 });
+
+// ---------- Estilo Medellín ----------
+import { melodicParts, seseo, splitPhrases, styleParts, voseo } from '../src/utils/voiceStyles.js';
+
+test('seseo makes a Spain voice read z/ce/ci like Latin American Spanish', () => {
+  assert.equal(seseo('Mendoza'), 'Mendosa');
+  assert.equal(seseo('Zapala, Cipolletti, cruce'), 'Sapala, Sipolletti, cruse');
+  assert.equal(seseo('chico, casa, que'), 'chico, casa, que', 'ch, ca and que are untouched');
+  assert.equal(seseo('dirección'), 'direcsión', 'cc is read k+s: only the second c softens');
+});
+
+test('voseo turns common directions into the paisa form, keeping capitalization', () => {
+  assert.equal(voseo('Gira a la derecha'), 'Girá a la derecha');
+  assert.equal(voseo('Continúa por RN151 y toma la salida'), 'Continuá por RN151 y tomá la salida');
+  assert.equal(voseo('Mantente a la izquierda'), 'Mantenete a la izquierda');
+  assert.equal(voseo('Sigue recto'), 'Seguí recto');
+  assert.equal(voseo('la salida'), 'la salida', 'sal inside salida is untouched');
+  assert.equal(voseo('girasol'), 'girasol', 'words that merely contain a verb are untouched');
+});
+
+test('phrases split on sentences then commas', () => {
+  assert.deepEqual(splitPhrases('Hola, vamos despacio. Seguí recto, sin apuro.'), [['Hola,', 'vamos despacio.'], ['Seguí recto,', 'sin apuro.']]);
+});
+
+test('melodic contour rises on continuing phrases and falls and slows on closing ones', () => {
+  const parts = melodicParts('Gira a la derecha, luego sigue. ¿Entendido?', { pitch: 1 });
+  assert.equal(parts.length, 3);
+  assert.ok(parts[0].pitch > 1, 'continuing phrase rises');
+  assert.ok(parts[1].pitch < 1, 'closing phrase falls');
+  assert.ok(parts[1].rateFactor < parts[0].rateFactor, 'closing phrase slows down');
+  assert.ok(parts[2].pitch > 1, 'questions close rising');
+  assert.ok(parts[1].text.endsWith('...'), 'closing phrase gets a longer pause');
+  assert.ok(parts.every((part) => part.pitch >= 0.1 && part.pitch <= 2));
+});
+
+test('Colombian style applies seseo only to Spain voices and always voseo', () => {
+  const spain = { lang: 'es-ES' };
+  const colombia = { lang: 'es-CO' };
+  assert.match(styleParts('colombiana', 'Gira hacia Mendoza.', spain).map((p) => p.text).join(' '), /Girá hasia Mendosa/);
+  assert.match(styleParts('colombiana', 'Gira hacia Mendoza.', colombia).map((p) => p.text).join(' '), /Girá hacia Mendoza/);
+  const standard = styleParts('standard', 'Gira hacia Mendoza.', spain);
+  assert.equal(standard.length, 1);
+  assert.equal(standard[0].text, 'Gira hacia Mendoza.');
+});
