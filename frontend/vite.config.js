@@ -100,5 +100,19 @@ self.addEventListener('fetch', (event) => {
 export default defineConfig({
   base: '/',
   plugins: [react(), offlineServiceWorker()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split vendor code so app changes don't invalidate the large UI-library chunks.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\/]node_modules[\/](@mui|@emotion)[\/]/.test(id)) return 'vendor-mui';
+          if (/[\/]node_modules[\/](react|react-dom|scheduler)[\/]/.test(id)) return 'vendor-react';
+          if (/[\/]node_modules[\/](axios|lucide-react|@googlemaps)[\/]/.test(id)) return 'vendor-misc';
+          return undefined;
+        },
+      },
+    },
+  },
   server: { port: 5173 },
 });

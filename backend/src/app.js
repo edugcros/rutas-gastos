@@ -17,7 +17,7 @@ app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origen no autorizado por CORS.'));
+    return callback(Object.assign(new Error('Origen no autorizado por CORS.'), { statusCode: 403, expose: true }));
   },
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],

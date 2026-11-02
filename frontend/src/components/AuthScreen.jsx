@@ -96,7 +96,7 @@ export default function AuthScreen({ onAuthenticated }) {
         </Stack>
 
         <Box sx={{ maxWidth: 590, py: { xs: 2, md: 5 } }}>
-          <Typography sx={{ display: 'inline-flex', px: 1.35, py: .7, mb: 2, border: '1px solid rgba(255,255,255,.25)', borderRadius: 99, bgcolor: 'rgba(255,255,255,.12)', color: '#F2EFFF', fontSize: 10, fontWeight: 800, letterSpacing: 1.35 }}>
+          <Typography sx={{ display: 'inline-flex', px: 1.35, py: .7, mb: 2, border: '1px solid rgba(255,255,255,.25)', borderRadius: 99, bgcolor: 'rgba(255,255,255,.12)', color: '#F2EFFF', fontSize: 12, fontWeight: 800, letterSpacing: 1.35 }}>
             LOCAL · PRIVADO · OFFLINE FIRST
           </Typography>
           <Typography component="h1" sx={{ fontSize: { xs: 37, sm: 48, lg: 65 }, lineHeight: 1.02, fontWeight: 900, letterSpacing: '-.055em', maxWidth: 560 }}>
@@ -108,14 +108,14 @@ export default function AuthScreen({ onAuthenticated }) {
           </Typography>
           <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 3 }}>
             {['Finanzas claras', 'Rutas inteligentes', 'Datos locales'].map((item) => (
-              <Box key={item} sx={{ px: 1.4, py: .85, border: '1px solid rgba(255,255,255,.22)', borderRadius: 99, bgcolor: 'rgba(255,255,255,.10)', color: '#fff', fontSize: 10, fontWeight: 700 }}>
+              <Box key={item} sx={{ px: 1.4, py: .85, border: '1px solid rgba(255,255,255,.22)', borderRadius: 99, bgcolor: 'rgba(255,255,255,.10)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
                 {item}
               </Box>
             ))}
           </Stack>
         </Box>
 
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ color: 'rgba(255,255,255,.72)', fontSize: 10, letterSpacing: .25 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ color: 'rgba(255,255,255,.72)', fontSize: 12, letterSpacing: .25 }}>
           <Typography variant="caption" sx={{ color: 'inherit' }}>Tu espacio de trabajo no depende de un servidor.</Typography>
           <Typography variant="caption" sx={{ color: 'inherit', fontWeight: 800, letterSpacing: 1 }}>ARGENTINA · ARS</Typography>
         </Stack>
@@ -134,7 +134,7 @@ export default function AuthScreen({ onAuthenticated }) {
       >
         <Box sx={{ width: '100%', maxWidth: 470 }}>
           <Stack spacing={1} sx={{ mb: 3.2 }}>
-            <Typography sx={{ color: 'primary.main', fontSize: 10, letterSpacing: 1.45, fontWeight: 850 }}>
+            <Typography sx={{ color: 'primary.main', fontSize: 12, letterSpacing: 1.45, fontWeight: 850 }}>
               CONFIGURACIÓN DE ESTE EQUIPO
             </Typography>
             <Typography component="h2" variant="h4" sx={{ color: '#202744', fontWeight: 900 }}>
@@ -153,7 +153,7 @@ export default function AuthScreen({ onAuthenticated }) {
                 </Box>
                 <Box>
                   <Typography sx={{ color: '#28365C', fontSize: 12, fontWeight: 800 }}>Base local</Typography>
-                  <Typography color="text.secondary" sx={{ fontSize: 11 }}>Los datos se guardan en este dispositivo.</Typography>
+                  <Typography color="text.secondary" sx={{ fontSize: 12.5 }}>Los datos se guardan en este dispositivo.</Typography>
                 </Box>
               </CardContent>
             </Card>
@@ -164,7 +164,7 @@ export default function AuthScreen({ onAuthenticated }) {
                 </Box>
                 <Box>
                   <Typography sx={{ color: '#513465', fontSize: 12, fontWeight: 800 }}>Modo sin conexión</Typography>
-                  <Typography color="text.secondary" sx={{ fontSize: 11 }}>Movimientos y balances siguen disponibles offline.</Typography>
+                  <Typography color="text.secondary" sx={{ fontSize: 12.5 }}>Movimientos y balances siguen disponibles offline.</Typography>
                 </Box>
               </CardContent>
             </Card>
@@ -206,7 +206,7 @@ export default function AuthScreen({ onAuthenticated }) {
               {busy ? 'Preparando almacenamiento...' : 'Crear espacio en este equipo'}
             </Button>
           </Box>
-          <Typography sx={{ mt: 3, color: '#8A91A9', fontSize: 10.5, lineHeight: 1.75, textAlign: 'center' }}>
+          <Typography sx={{ mt: 3, color: '#8A91A9', fontSize: 12, lineHeight: 1.75, textAlign: 'center' }}>
             No se crea una cuenta online. Otra computadora tendrá una base local independiente. Guardá copias de seguridad periódicas.
           </Typography>
         </Box>

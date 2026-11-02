@@ -30,22 +30,34 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  ArrowLeft, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Fuel, MapPinned,
-  Plus, Route as RouteIcon, ShieldAlert, Trash2, Wallet, WifiOff,
+  ArrowLeft, BedDouble, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Fuel, Landmark, MapPinned,
+  PawPrint, Plus, Route as RouteIcon, ShieldAlert, Trash2, Truck, Utensils, Wallet, WifiOff, Wrench,
 } from 'lucide-react';
 import http from '../api/http.js';
 import { GOOGLE_MAPS_BROWSER_KEY_CONFIGURED, ROUTE_SERVICE_CONFIGURED } from '../config/services.js';
 import MapCanvas from './MapCanvas.jsx';
 import { categoryLabel, dateLabel, distance, duration, expenseCategories, money } from '../utils.js';
 
-const EMPTY_EXPENSE = {
+// Evaluated per form, in the user's local time zone. A module-level constant
+// would freeze the date at load time and, via toISOString(), shift it to UTC.
+function localDateInput(date = new Date()) {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+const makeEmptyExpense = () => ({
   category: 'FUEL',
   description: '',
   amount: '',
   currency: 'ARS',
   deductFromProfit: true,
   paymentMethod: 'CASH',
-  expenseDate: new Date().toISOString().slice(0, 10),
+  expenseDate: localDateInput(),
+});
+
+const categoryIcons = {
+  FUEL: Fuel, FOOD: Utensils, LODGING: BedDouble, TOLLS: Landmark,
+  REPAIRS: Wrench, TRANSPORT: Truck, VETERINARY: PawPrint, OTHER: CircleDollarSign,
 };
 
 const tripStatus = {
@@ -61,17 +73,26 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   const [prompt, setPrompt] = useState('');
   const [plan, setPlan] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [expense, setExpense] = useState(EMPTY_EXPENSE);
+  const [expense, setExpense] = useState(makeEmptyExpense);
   const [showExpense, setShowExpense] = useState(false);
   const [incomeAmount, setIncomeAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const plannerInFlightRef = useRef(false);
   const [savingRoute, setSavingRoute] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
+  const mountedRef = useRef(true);
+  const promptSeededRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   async function loadDetail() {
     const { data } = await http.get(`/trips/${tripId}`);
+    if (!mountedRef.current) return data;
     setDetail(data);
     setSelectedIndex(data.trip.selectedRouteIndex ?? 0);
     setIncomeAmount(String(data.trip.income?.amount ?? 0));
@@ -85,14 +106,16 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   const displayedRoutes = plan?.routes || currentTrip?.routeOptions || [];
 
   useEffect(() => {
-    loadDetail().catch((requestError) => setError(requestError.userMessage || 'No se pudo cargar el viaje.'));
+    loadDetail().catch((requestError) => { if (mountedRef.current) setError(requestError.userMessage || requestError.message || 'No se pudo cargar el viaje.'); });
   }, [tripId]);
 
   useEffect(() => {
-    if (currentTrip && !prompt) {
-      setPrompt('Calculá el recorrido respetando exactamente el orden de las ubicaciones definidas arriba. Mostrame kilómetros, tiempo estimado, indicaciones por tramo y advertencias viales.');
+    // Seed the default prompt once; clearing the field afterwards must not refill it.
+    if (currentTrip && !promptSeededRef.current) {
+      promptSeededRef.current = true;
+      if (!prompt) setPrompt('Calculá el recorrido respetando exactamente el orden de las ubicaciones definidas arriba. Mostrame kilómetros, tiempo estimado, indicaciones por tramo y advertencias viales.');
     }
-  }, [currentTrip?._id, currentTrip?.origin, currentTrip?.destination, currentTrip?.waypoints, prompt]);
+  }, [currentTrip?._id]);
 
   const activeRoute = displayedRoutes[selectedIndex];
   const expenses = detail?.expenses || [];
@@ -170,22 +193,31 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
 
   async function addExpense(event) {
     event.preventDefault();
+    if (savingExpense) return;
     setError('');
     setSuccess('');
+    const amount = Number(expense.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Ingresá un importe mayor que cero.');
+      return;
+    }
+    setSavingExpense(true);
     try {
       await http.post(`/trips/${tripId}/expenses`, {
         ...expense,
         currency: currentTrip.income.currency,
-        amount: Number(expense.amount),
+        amount,
         expenseDate: new Date(`${expense.expenseDate}T12:00:00`).toISOString(),
       });
-      setExpense(EMPTY_EXPENSE);
+      setExpense(makeEmptyExpense());
       setShowExpense(false);
       await loadDetail();
       onChanged();
       setSuccess('Gasto registrado. El saldo fue recalculado.');
     } catch (requestError) {
-      setError(requestError.userMessage || 'No se pudo registrar el gasto.');
+      setError(requestError.userMessage || requestError.message || 'No se pudo registrar el gasto.');
+    } finally {
+      if (mountedRef.current) setSavingExpense(false);
     }
   }
 
@@ -205,13 +237,19 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
   async function saveIncome(event) {
     event.preventDefault();
     setError('');
+    setSuccess('');
+    const amount = Number(incomeAmount);
+    if (incomeAmount.trim() === '' || !Number.isFinite(amount) || amount < 0) {
+      setError('Ingresá un monto de ingreso válido (cero o mayor).');
+      return;
+    }
     try {
-      await http.patch(`/trips/${tripId}`, { incomeAmount: Number(incomeAmount) });
+      await http.patch(`/trips/${tripId}`, { incomeAmount: amount });
       await loadDetail();
       onChanged();
       setSuccess('Ingreso base actualizado.');
     } catch (requestError) {
-      setError(requestError.userMessage || 'No se pudo actualizar el ingreso.');
+      setError(requestError.userMessage || requestError.message || 'No se pudo actualizar el ingreso.');
     }
   }
 
@@ -239,30 +277,30 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
           </Tooltip>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" alignItems="center" spacing={.8} flexWrap="wrap">
-              <Typography sx={{ color: 'primary.main', fontSize: 9, fontWeight: 900, letterSpacing: 1.3 }}>VIAJE</Typography>
-              <Chip size="small" label={status.label} color={status.color} sx={{ height: 22, fontSize: 9 }} />
+              <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>VIAJE</Typography>
+              <Chip size="small" label={status.label} color={status.color} sx={{ height: 22, fontSize: 11 }} />
             </Stack>
             <Typography component="h1" noWrap sx={{ mt: .3, color: '#202744', fontSize: { xs: 21, sm: 25 }, fontWeight: 900, letterSpacing: '-.04em' }}>{currentTrip.name}</Typography>
-            <Typography color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.5 }}>
+            <Typography color="text.secondary" sx={{ fontSize: 12.5, lineHeight: 1.5 }}>
               {[currentTrip.origin, ...(currentTrip.waypoints || []), currentTrip.destination].join('  →  ')}
             </Typography>
           </Box>
         </Stack>
-        <Chip icon={<CalendarDays size={15} />} label={dateLabel(currentTrip.startDate)} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, bgcolor: '#fff', borderColor: '#E4E8F2', color: '#65718F', fontSize: 10, fontWeight: 750, height: 33 }} />
+        <Chip icon={<CalendarDays size={15} />} label={dateLabel(currentTrip.startDate)} variant="outlined" sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, bgcolor: '#fff', borderColor: '#E4E8F2', color: '#65718F', fontSize: 12, fontWeight: 750, height: 33 }} />
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', lg: '1.45fr repeat(3,minmax(0,1fr))' }, gap: 1.2, mb: 2.6 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,minmax(0,1fr))', sm: 'repeat(3,minmax(0,1fr))', lg: '1.45fr repeat(3,minmax(0,1fr))' }, gap: 1.2, mb: 2.6 }}>
         <Card sx={{ gridColumn: { xs: '1 / -1', lg: 'auto' }, overflow: 'hidden', color: '#fff', background: 'linear-gradient(120deg,#30429C 0%,#5869E9 58%,#8B67D8 100%)', border: 0, boxShadow: '0 12px 25px rgba(72,84,188,.18)' }}>
           <CardContent sx={{ p: 2.1, '&:last-child': { pb: 2.1 } }}>
-            <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 9, fontWeight: 850, letterSpacing: 1.2 }}>GANANCIA DISPONIBLE</Typography>
+            <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 11, fontWeight: 850, letterSpacing: 1.2 }}>GANANCIA DISPONIBLE</Typography>
             <Typography sx={{ mt: .8, color: '#fff', fontSize: { xs: 22, sm: 27 }, fontWeight: 900, letterSpacing: '-.04em', overflowWrap: 'anywhere' }}>{money(summary?.availableProfit, summary?.currency)}</Typography>
-            <Typography sx={{ mt: .3, color: 'rgba(255,255,255,.72)', fontSize: 9.5 }}>Ingreso inicial menos gastos descontados</Typography>
+            <Typography sx={{ mt: .3, color: 'rgba(255,255,255,.72)', fontSize: 11 }}>Ingreso inicial menos gastos descontados</Typography>
           </CardContent>
         </Card>
         <Card sx={{ background: 'linear-gradient(145deg,#FFFFFF,#F1F4FF)', borderColor: '#E1E6FA' }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 10, fontWeight: 750 }}>Ingreso inicial</Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Ingreso inicial</Typography>
               <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#E4E9FF', color: '#5967DB' }}><Wallet size={16} /></Avatar>
             </Stack>
             <Typography sx={{ mt: 1.1, color: '#2D385D', fontSize: 15, fontWeight: 850, overflowWrap: 'anywhere' }}>{money(summary?.initialIncome, summary?.currency)}</Typography>
@@ -271,16 +309,16 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
         <Card sx={{ background: 'linear-gradient(145deg,#FFFFFF,#FFF1F4)', borderColor: '#F3E0E7' }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 10, fontWeight: 750 }}>Gastos descontados</Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Gastos descontados</Typography>
               <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#FFE4EA', color: '#C34F6B' }}><CircleDollarSign size={16} /></Avatar>
             </Stack>
             <Typography sx={{ mt: 1.1, color: '#B14F67', fontSize: 15, fontWeight: 850, overflowWrap: 'anywhere' }}>− {money(summary?.deductibleExpenses, summary?.currency)}</Typography>
           </CardContent>
         </Card>
-        <Card sx={{ background: 'linear-gradient(145deg,#FFFFFF,#ECFAF7)', borderColor: '#D8EFE8' }}>
+        <Card sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' }, background: 'linear-gradient(145deg,#FFFFFF,#ECFAF7)', borderColor: '#D8EFE8' }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography color="text.secondary" sx={{ fontSize: 10, fontWeight: 750 }}>Gastos registrados</Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 750 }}>Gastos registrados</Typography>
               <Avatar variant="rounded" sx={{ width: 30, height: 30, bgcolor: '#DDF5ED', color: '#12866A' }}><Fuel size={16} /></Avatar>
             </Stack>
             <Typography sx={{ mt: 1.1, color: '#187A67', fontSize: 19, fontWeight: 900 }}>{summary?.expenseCount || 0}</Typography>
@@ -303,7 +341,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             minHeight: 50,
             px: { xs: 0.5, sm: 2 },
             mr: 0,
-            fontSize: { xs: 9.5, sm: 12 },
+            fontSize: { xs: 11, sm: 12 },
             whiteSpace: 'nowrap',
           },
           '& .MuiTab-iconWrapper': { mr: { xs: 0.5, sm: 0.8 } },
@@ -324,35 +362,35 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             <CardContent sx={{ p: { xs: 1.8, sm: 2.3 }, '&:last-child': { pb: { xs: 1.8, sm: 2.3 } } }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 2 }}>
                 <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 9, fontWeight: 900, letterSpacing: 1.3 }}>ASISTENTE DE RUTA</Typography>
+                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>ASISTENTE DE RUTA</Typography>
                   <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>¿A dónde vamos?</Typography>
                 </Box>
-                <Chip size="small" label="IA + MAPS" color="secondary" variant="outlined" sx={{ bgcolor: '#FFF7FC', fontSize: 9 }} />
+                <Chip size="small" label="IA + MAPS" color="secondary" variant="outlined" sx={{ bgcolor: '#FFF7FC', fontSize: 11 }} />
               </Stack>
 
               {!online && (
-                <Alert severity="warning" icon={<WifiOff size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 11 }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 800 }}>Planificación con IA no disponible sin Internet</Typography>
-                  <Typography sx={{ fontSize: 10 }}>Los viajes, gastos y rutas guardadas siguen disponibles en este equipo. Gemini y Google Routes requieren conexión.</Typography>
+                <Alert severity="warning" icon={<WifiOff size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 12.5 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Planificación con IA no disponible sin Internet</Typography>
+                  <Typography sx={{ fontSize: 12 }}>Los viajes, gastos y rutas guardadas siguen disponibles en este equipo. Gemini y Google Routes requieren conexión.</Typography>
                 </Alert>
               )}
               {online && !ROUTE_SERVICE_CONFIGURED && (
-                <Alert severity="info" icon={<ShieldAlert size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 11 }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 800 }}>Servicio de rutas no configurado</Typography>
-                  <Typography sx={{ fontSize: 10 }}>La gestión local está operativa. Configurá el endpoint remoto antes de compilar la aplicación.</Typography>
+                <Alert severity="info" icon={<ShieldAlert size={17} />} sx={{ mb: 1.8, borderRadius: 2.7, fontSize: 12.5 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Servicio de rutas no configurado</Typography>
+                  <Typography sx={{ fontSize: 12 }}>La gestión local está operativa. Configurá el endpoint remoto antes de compilar la aplicación.</Typography>
                 </Alert>
               )}
 
               <Paper variant="outlined" sx={{ mb: 1.8, p: 1.5, borderRadius: 3, borderColor: '#E2E7F3', background: 'linear-gradient(135deg,#F9FAFF,#FFFFFF)' }}>
-                <Typography sx={{ color: '#68739A', fontSize: 9, fontWeight: 900, letterSpacing: 1.1, mb: 1 }}>RECORRIDO EN ORDEN</Typography>
+                <Typography sx={{ color: '#68739A', fontSize: 11, fontWeight: 900, letterSpacing: 1.1, mb: 1 }}>RECORRIDO EN ORDEN</Typography>
                 <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap spacing={.7}>
-                  <Chip size="small" color="success" label={`Inicio · ${currentTrip.origin}`} sx={{ fontSize: 9, fontWeight: 750 }} />
+                  <Chip size="small" color="success" label={`Inicio · ${currentTrip.origin}`} sx={{ fontSize: 11, fontWeight: 750 }} />
                   {(currentTrip.waypoints || []).map((point, index) => (
-                    <Chip key={`${index}-${point}`} size="small" color="primary" variant="outlined" label={`${index + 1}. ${point}`} sx={{ fontSize: 9, fontWeight: 700, bgcolor: '#fff' }} />
+                    <Chip key={`${index}-${point}`} size="small" color="primary" variant="outlined" label={`${index + 1}. ${point}`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: '#fff' }} />
                   ))}
-                  <Chip size="small" color="secondary" label={`Destino · ${currentTrip.destination}`} sx={{ fontSize: 9, fontWeight: 750 }} />
+                  <Chip size="small" color="secondary" label={`Destino · ${currentTrip.destination}`} sx={{ fontSize: 11, fontWeight: 750 }} />
                 </Stack>
-                <Typography sx={{ mt: 1, color: '#808AA3', fontSize: 9 }}>
+                <Typography sx={{ mt: 1, color: '#808AA3', fontSize: 11 }}>
                   La secuencia se envía como datos estructurados y se respeta al calcular. Gemini no modifica ni agrega ubicaciones.
                 </Typography>
               </Paper>
@@ -396,14 +434,14 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                       }}
                     >
                       <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                        <Typography noWrap sx={{ fontSize: 11, fontWeight: 800, maxWidth: '82%', color: 'inherit' }}>{route.description || `Alternativa ${index + 1}`}</Typography>
+                        <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 800, maxWidth: '82%', color: 'inherit' }}>{route.description || `Alternativa ${index + 1}`}</Typography>
                         {selectedIndex === index && <Check size={16} />}
                       </Stack>
                       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: .8 }}>
                         <Typography sx={{ fontSize: 16, fontWeight: 900, color: 'inherit' }}>{distance(route.distanceMeters)}</Typography>
                         <Stack direction="row" spacing={.6} alignItems="center">
                           <Clock3 size={13} />
-                          <Typography sx={{ fontSize: 10, color: 'inherit' }}>{duration(route.durationSeconds)}</Typography>
+                          <Typography sx={{ fontSize: 12, color: 'inherit' }}>{duration(route.durationSeconds)}</Typography>
                         </Stack>
                       </Stack>
                     </Button>
@@ -418,8 +456,8 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1.2, mt: 2.2, p: 1.5, borderRadius: 3, borderColor: '#E3E8F3', bgcolor: '#FBFCFF' }}>
                   <Avatar variant="rounded" sx={{ width: 39, height: 39, bgcolor: '#E7EBFF', color: '#5967D9' }}><RouteIcon size={18} /></Avatar>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography sx={{ color: '#2A3557', fontSize: 11, fontWeight: 850 }}>Ruta guardada</Typography>
-                    <Typography color="text.secondary" sx={{ fontSize: 10 }}>
+                    <Typography sx={{ color: '#2A3557', fontSize: 12.5, fontWeight: 850 }}>Ruta guardada</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>
                       {distance(currentTrip.routeOptions[currentTrip.selectedRouteIndex ?? 0]?.distanceMeters)} · {duration(currentTrip.routeOptions[currentTrip.selectedRouteIndex ?? 0]?.durationSeconds)}
                     </Typography>
                   </Box>
@@ -429,11 +467,11 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
 
               {(plan?.caveats?.length > 0 || (currentTrip.routeOptions?.length > 0 && !plan)) && (
                 <Alert severity="warning" variant="outlined" icon={<ShieldAlert size={17} />} sx={{ mt: 2, borderRadius: 3, bgcolor: '#FFFBF4' }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 850 }}>Información vial y seguridad</Typography>
-                  <Box component="ul" sx={{ pl: 2, my: .8, '& li': { mb: .4, fontSize: 10, lineHeight: 1.55 } }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 850 }}>Información vial y seguridad</Typography>
+                  <Box component="ul" sx={{ pl: 2, my: .8, '& li': { mb: .4, fontSize: 12, lineHeight: 1.55 } }}>
                     {(plan?.caveats || ['Pavimentación y cortes no verificados en tiempo real por esta ruta guardada.']).map((item, index) => <li key={index}>{item}</li>)}
                   </Box>
-                  <Typography component="a" href="https://www.argentina.gob.ar/rutasnacionales" target="_blank" rel="noreferrer" sx={{ color: '#5E6FC9', fontSize: 10, fontWeight: 750, textDecoration: 'underline' }}>
+                  <Typography component="a" href="https://www.argentina.gob.ar/rutasnacionales" target="_blank" rel="noreferrer" sx={{ color: '#5E6FC9', fontSize: 12, fontWeight: 750, textDecoration: 'underline' }}>
                     Consultar estado de rutas de Vialidad Nacional ↗
                   </Typography>
                 </Alert>
@@ -445,10 +483,10 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             <CardContent sx={{ p: { xs: 1.4, sm: 2 }, '&:last-child': { pb: { xs: 1.4, sm: 2 } } }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }}>
                 <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 9, fontWeight: 900, letterSpacing: 1.3 }}>VISUALIZACIÓN</Typography>
+                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>VISUALIZACIÓN</Typography>
                   <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 17, fontWeight: 900 }}>Mapa del recorrido</Typography>
                 </Box>
-                <Chip size="small" label={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista offline'} color={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'success' : 'default'} variant="outlined" sx={{ fontSize: 9 }} />
+                <Chip size="small" label={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista offline'} color={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'success' : 'default'} variant="outlined" sx={{ fontSize: 11 }} />
               </Stack>
               <Box sx={{ minWidth: 0, width: '100%', overflow: 'hidden', borderRadius: 2.5 }}>
                 <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
@@ -456,34 +494,34 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
               {activeRoute && (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, mt: 1.5 }}>
                   <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F4F6FF', borderColor: '#E3E8FB' }}>
-                    <Typography sx={{ color: '#7B83A0', fontSize: 9, fontWeight: 700 }}>Distancia</Typography>
+                    <Typography sx={{ color: '#7B83A0', fontSize: 11, fontWeight: 700 }}>Distancia</Typography>
                     <Typography sx={{ mt: .3, color: '#29345E', fontSize: 13, fontWeight: 900 }}>{distance(activeRoute.distanceMeters)}</Typography>
                   </Paper>
                   <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F1FAF8', borderColor: '#D9EEE8' }}>
-                    <Typography sx={{ color: '#7B83A0', fontSize: 9, fontWeight: 700 }}>Duración estimada</Typography>
+                    <Typography sx={{ color: '#7B83A0', fontSize: 11, fontWeight: 700 }}>Duración estimada</Typography>
                     <Typography sx={{ mt: .3, color: '#207762', fontSize: 13, fontWeight: 900 }}>{duration(activeRoute.durationSeconds)}</Typography>
                   </Paper>
                   <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#FFF8EC', borderColor: '#F2E6CF' }}>
-                    <Typography sx={{ color: '#8A7C61', fontSize: 9, fontWeight: 700 }}>Calzada</Typography>
-                    <Typography sx={{ mt: .3, color: '#A07832', fontSize: 11, fontWeight: 850 }}>Sin verificar</Typography>
+                    <Typography sx={{ color: '#8A7C61', fontSize: 11, fontWeight: 700 }}>Calzada</Typography>
+                    <Typography sx={{ mt: .3, color: '#A07832', fontSize: 12.5, fontWeight: 850 }}>Sin verificar</Typography>
                   </Paper>
                 </Box>
               )}
               {activeRoute?.legs?.some((leg) => leg.instructions?.length) && (
                 <Accordion disableGutters elevation={0} sx={{ mt: 1.5, border: '1px solid #E6EAF3', borderRadius: '12px !important', '&::before': { display: 'none' } }}>
                   <AccordionSummary expandIcon={<ChevronDown size={17} />} sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 1 } }}>
-                    <Typography sx={{ color: '#53617F', fontSize: 11, fontWeight: 800 }}>Ver indicaciones y nombres de vías</Typography>
+                    <Typography sx={{ color: '#53617F', fontSize: 12.5, fontWeight: 800 }}>Ver indicaciones y nombres de vías</Typography>
                   </AccordionSummary>
                   <AccordionDetails sx={{ pt: 0 }}>
                     {activeRoute.optimizedIntermediateWaypointIndex?.length > 0 && (
-                      <Typography sx={{ color: '#5967C9', fontSize: 10, mb: 1 }}>
+                      <Typography sx={{ color: '#5967C9', fontSize: 12, mb: 1 }}>
                         Orden optimizado de paradas (índices): {activeRoute.optimizedIntermediateWaypointIndex.map((value) => value + 1).join(' → ')}
                       </Typography>
                     )}
                     {activeRoute.legs.map((leg, legIndex) => (
                       <Box key={legIndex} sx={{ mb: 1.5 }}>
-                        <Typography sx={{ color: '#33405F', fontSize: 10, fontWeight: 850 }}>Tramo {legIndex + 1}</Typography>
-                        <Box component="ol" sx={{ pl: 2.2, mt: .6, mb: 0, '& li': { color: '#687591', mb: .5, fontSize: 10, lineHeight: 1.55 } }}>
+                        <Typography sx={{ color: '#33405F', fontSize: 12, fontWeight: 850 }}>Tramo {legIndex + 1}</Typography>
+                        <Box component="ol" sx={{ pl: 2.2, mt: .6, mb: 0, '& li': { color: '#687591', mb: .5, fontSize: 12, lineHeight: 1.55 } }}>
                           {leg.instructions.map((instruction, index) => <li key={`${legIndex}-${index}`}>{instruction}</li>)}
                         </Box>
                       </Box>
@@ -492,7 +530,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 </Accordion>
               )}
               {activeRoute && (
-                <Typography sx={{ mt: 1.2, color: '#76809B', fontSize: 9.5, lineHeight: 1.55 }}>
+                <Typography sx={{ mt: 1.2, color: '#76809B', fontSize: 11, lineHeight: 1.55 }}>
                   La línea representa el trazado calculado. La condición de cada tramo requiere verificación externa.
                 </Typography>
               )}
@@ -505,7 +543,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             <CardContent sx={{ p: { xs: 1.8, sm: 2.3 }, '&:last-child': { pb: { xs: 1.8, sm: 2.3 } } }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
                 <Box>
-                  <Typography sx={{ color: 'primary.main', fontSize: 9, fontWeight: 900, letterSpacing: 1.3 }}>MOVIMIENTOS DEL VIAJE</Typography>
+                  <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>MOVIMIENTOS DEL VIAJE</Typography>
                   <Typography component="h2" sx={{ mt: .4, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>Registro de gastos</Typography>
                 </Box>
                 <Button size="small" variant="contained" startIcon={<Plus size={16} />} onClick={() => setShowExpense((value) => !value)}>
@@ -532,12 +570,12 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                     </Box>
                     <FormControlLabel
                       control={<Checkbox checked={expense.deductFromProfit} onChange={(event) => setExpense((prev) => ({ ...prev, deductFromProfit: event.target.checked }))} />}
-                      label={<Box><Typography sx={{ fontSize: 11, fontWeight: 800 }}>Descontar de la ganancia</Typography><Typography color="text.secondary" sx={{ fontSize: 10 }}>Desmarcá si querés registrar el gasto sin afectar el saldo disponible.</Typography></Box>}
+                      label={<Box><Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>Descontar de la ganancia</Typography><Typography color="text.secondary" sx={{ fontSize: 12 }}>Desmarcá si querés registrar el gasto sin afectar el saldo disponible.</Typography></Box>}
                       sx={{ alignItems: 'flex-start', m: 0, p: 1.1, borderRadius: 2.5, bgcolor: '#fff', border: '1px solid #E5EAF3' }}
                     />
                     <Stack direction="row" justifyContent="flex-end" spacing={1}>
                       <Button variant="outlined" color="inherit" onClick={() => setShowExpense(false)}>Cancelar</Button>
-                      <Button type="submit" variant="contained" color="primary">Guardar gasto</Button>
+                      <Button type="submit" variant="contained" color="primary" disabled={savingExpense}>{savingExpense ? 'Guardando...' : 'Guardar gasto'}</Button>
                     </Stack>
                   </Box>
                 </Paper>
@@ -560,16 +598,16 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                       >
                         <ListItemAvatar sx={{ minWidth: 46 }}>
                           <Avatar variant="rounded" sx={{ width: 39, height: 39, color: '#5D6ED1', bgcolor: '#EDF0FF', border: '1px solid #E0E6FF' }}>
-                            <Fuel size={17} />
+                            {(() => { const CategoryIcon = categoryIcons[item.category] || CircleDollarSign; return <CategoryIcon size={17} />; })()}
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
-                          primary={<Typography noWrap sx={{ color: '#2D3655', fontSize: 11, fontWeight: 850 }}>{item.description}</Typography>}
-                          secondary={<Typography sx={{ color: '#7D86A0', fontSize: 9.5 }}>{categoryLabel(item.category)} · {dateLabel(item.expenseDate)}</Typography>}
+                          primary={<Typography noWrap sx={{ color: '#2D3655', fontSize: 12.5, fontWeight: 850 }}>{item.description}</Typography>}
+                          secondary={<Typography sx={{ color: '#7D86A0', fontSize: 11 }}>{categoryLabel(item.category)} · {dateLabel(item.expenseDate)}</Typography>}
                         />
                         <Box sx={{ minWidth: { xs: 100, sm: 135 }, textAlign: 'right' }}>
                           <Typography sx={{ color: '#2A3453', fontSize: 12, fontWeight: 850 }}>{money(item.amount, item.currency)}</Typography>
-                          <Typography sx={{ color: item.deductFromProfit ? '#B64E67' : '#6B7E96', fontSize: 9 }}>
+                          <Typography sx={{ color: item.deductFromProfit ? '#B64E67' : '#6B7E96', fontSize: 11 }}>
                             {item.deductFromProfit ? 'Descontado de ganancia' : 'No afecta ganancia'}
                           </Typography>
                         </Box>
@@ -584,7 +622,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                     <CircleDollarSign size={25} />
                   </Avatar>
                   <Typography sx={{ color: '#303A5D', fontSize: 13, fontWeight: 850 }}>Todavía no hay gastos</Typography>
-                  <Typography color="text.secondary" sx={{ maxWidth: 280, mt: .5, fontSize: 10.5 }}>Registrá combustible, viáticos, peajes y otros movimientos.</Typography>
+                  <Typography color="text.secondary" sx={{ maxWidth: 280, mt: .5, fontSize: 12 }}>Registrá combustible, viáticos, peajes y otros movimientos.</Typography>
                   <Button variant="outlined" size="small" startIcon={<Plus size={15} />} onClick={() => setShowExpense(true)} sx={{ mt: 1.5 }}>Agregar primer gasto</Button>
                 </Paper>
               )}
@@ -594,7 +632,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
           <Stack spacing={1.8}>
             <Card>
               <CardContent sx={{ p: 2.2, '&:last-child': { pb: 2.2 } }}>
-                <Typography sx={{ color: 'primary.main', fontSize: 9, fontWeight: 900, letterSpacing: 1.3 }}>RESUMEN ECONÓMICO</Typography>
+                <Typography sx={{ color: 'primary.main', fontSize: 11, fontWeight: 900, letterSpacing: 1.3 }}>RESUMEN ECONÓMICO</Typography>
                 <Typography component="h2" sx={{ mt: .4, mb: 2, color: '#252D4C', fontSize: 18, fontWeight: 900 }}>Estado de la ganancia</Typography>
                 <Box component="form" onSubmit={saveIncome} sx={{ display: 'grid', gap: 1.2 }}>
                   <TextField
@@ -605,7 +643,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                     onChange={(event) => setIncomeAmount(event.target.value)}
                     slotProps={{
                       htmlInput: { min: 0, step: .01 },
-                      input: { startAdornment: <InputAdornment position="start">$</InputAdornment> },
+                      input: { startAdornment: <InputAdornment position="start">{currentTrip.income.currency === 'USD' ? 'US$' : '$'}</InputAdornment> },
                     }}
                   />
                   <Button type="submit" variant="outlined" fullWidth>Actualizar ingreso</Button>
@@ -613,31 +651,31 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 <Divider sx={{ my: 2, borderColor: '#E9EDF5' }} />
                 <Stack spacing={1.6}>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 10.5 }}>Ingreso inicial</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 11, fontWeight: 800 }}>{money(summary?.initialIncome, summary?.currency)}</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Ingreso inicial</Typography>
+                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.initialIncome, summary?.currency)}</Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 10.5 }}>Gastos que descuentan</Typography>
-                    <Typography sx={{ color: '#B84D65', fontSize: 11, fontWeight: 800 }}>− {money(summary?.deductibleExpenses, summary?.currency)}</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Gastos que descuentan</Typography>
+                    <Typography sx={{ color: '#B84D65', fontSize: 12.5, fontWeight: 800 }}>− {money(summary?.deductibleExpenses, summary?.currency)}</Typography>
                   </Stack>
                   <Paper variant="outlined" sx={{ p: 1.6, borderRadius: 3, borderColor: '#CFE9DE', background: 'linear-gradient(135deg,#EFFAF5,#E6F7F0)' }}>
-                    <Typography sx={{ color: '#43846D', fontSize: 10, fontWeight: 800 }}>DISPONIBLE</Typography>
+                    <Typography sx={{ color: '#43846D', fontSize: 12, fontWeight: 800 }}>DISPONIBLE</Typography>
                     <Typography sx={{ mt: .4, color: '#0A8060', fontSize: 23, fontWeight: 900, letterSpacing: '-.04em', overflowWrap: 'anywhere' }}>{money(summary?.availableProfit, summary?.currency)}</Typography>
                   </Paper>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 10.5 }}>Gastos no descontados</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 11, fontWeight: 800 }}>{money(summary?.nonDeductibleExpenses, summary?.currency)}</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Gastos no descontados</Typography>
+                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.nonDeductibleExpenses, summary?.currency)}</Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography color="text.secondary" sx={{ fontSize: 10.5 }}>Total de gastos</Typography>
-                    <Typography sx={{ color: '#37415F', fontSize: 11, fontWeight: 800 }}>{money(summary?.totalExpenses, summary?.currency)}</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 12 }}>Total de gastos</Typography>
+                    <Typography sx={{ color: '#37415F', fontSize: 12.5, fontWeight: 800 }}>{money(summary?.totalExpenses, summary?.currency)}</Typography>
                   </Stack>
                 </Stack>
-                <Alert severity="info" variant="outlined" sx={{ mt: 2, borderRadius: 2.5, fontSize: 10, '& .MuiAlert-icon': { fontSize: 17 } }}>
+                <Alert severity="info" variant="outlined" sx={{ mt: 2, borderRadius: 2.5, fontSize: 12, '& .MuiAlert-icon': { fontSize: 17 } }}>
                   El ingreso original no se modifica al cargar gastos. El saldo se calcula automáticamente a partir de los movimientos marcados para descuento.
                 </Alert>
                 {Object.entries(groupedExpenses).some(([currency]) => currency !== (summary?.currency || 'ARS')) && (
-                  <Alert severity="warning" sx={{ mt: 1.2, borderRadius: 2.5, fontSize: 10 }}>
+                  <Alert severity="warning" sx={{ mt: 1.2, borderRadius: 2.5, fontSize: 12 }}>
                     Hay gastos en otra moneda. No se convierten automáticamente.
                   </Alert>
                 )}
