@@ -53,7 +53,7 @@ button { -webkit-tap-highlight-color: transparent; }
   display: flex; align-items: center; gap: 8px; padding: 11px 14px;
   color: #7a5a1f; border-bottom: 1px solid #e8edf2; background: #fffaf0; font-size: 12.5px; font-weight: 700;
 }
-.offline-map-sketch svg { display: block; width: 100%; max-height: 390px; }
+.offline-map-sketch > svg { display: block; width: 100%; max-height: 390px; }
 .offline-map-footer {
   padding: 10px 14px; color: #66738a; border-top: 1px solid #e8edf2; background: #fff;
   font-size: 12px; line-height: 1.5;
