@@ -90,7 +90,7 @@ function normalizeWaypoints(value, origin, destination) {
     throw new Error('Cada parada debe tener entre 2 y 180 caracteres.');
   }
 
-  const normalize = (point) => point.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, ' ').toLowerCase();
+  const normalize = (point) => point.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase();
   const locations = [origin, ...waypoints, destination].map(normalize);
   if (new Set(locations).size !== locations.length) {
     throw new Error('El origen, el destino y las paradas deben ser ubicaciones diferentes.');
@@ -320,6 +320,9 @@ async function getAllExpensesForTrip(tripId) {
 }
 
 export async function saveLocalTripRoutes(tripId, data) {
+  const origin = String(data.intent.origin || '').trim();
+  const destination = String(data.intent.destination || '').trim();
+  const waypoints = normalizeWaypoints(data.intent.waypoints || [], origin, destination);
   const db = await openDatabase();
   const tx = db.transaction('trips', 'readwrite');
   const done = transactionDone(tx);
@@ -329,9 +332,9 @@ export async function saveLocalTripRoutes(tripId, data) {
   request.onsuccess = () => {
     const trip = request.result;
     if (!trip) { tx.abort(); return; }
-    trip.origin = String(data.intent.origin || '').trim();
-    trip.destination = String(data.intent.destination || '').trim();
-    trip.waypoints = normalizeWaypoints(data.intent.waypoints || [], trip.origin, trip.destination);
+    trip.origin = origin;
+    trip.destination = destination;
+    trip.waypoints = waypoints;
     trip.createdFromPrompt = data.prompt || '';
     trip.routeOptions = (data.routes || []).map((route) => ({ ...route, calculatedAt: route.calculatedAt || new Date().toISOString() }));
     trip.selectedRouteIndex = data.selectedRouteIndex ?? 0;
