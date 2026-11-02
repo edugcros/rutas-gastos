@@ -24,7 +24,7 @@ IndexedDB local A                       IndexedDB local B
 - Cada perfil de navegador/dispositivo tiene una base IndexedDB propia.
 - No existe sincronización automática entre computadoras; los datos son deliberadamente independientes.
 - Los viajes, gastos, ingresos, liquidaciones y rutas ya guardadas funcionan sin conexión.
-- La PWA almacena el shell (HTML, JS, CSS, iconos y manifest) mediante Service Worker.
+- El Service Worker generado durante el build precachea el HTML, todos los chunks JS/CSS de Vite, fuentes, imágenes, iconos y manifest. La instalación offline se considera completa cuando la caché de precarga termina.
 - Gemini y Google Routes solo se invocan cuando hay conexión y está configurado `VITE_ROUTE_API_URL`.
 - Google Maps JavaScript requiere conexión. Sin ella se muestra un esquema SVG construido a partir de la polilínea guardada; no se simula cartografía base ni tráfico.
 
@@ -82,7 +82,30 @@ Los importes se almacenan como enteros en unidades menores (centavos), evitando 
 
 No se envían a Gemini ni a Google los gastos, balances, comprobantes ni la base local. El único dato remitido al servicio de planificación es el prompt de recorrido necesario para interpretar origen, destino y preferencias.
 
+## Verificación de conectividad y carga de mapas
+
+- La etiqueta de conexión verifica el acceso real al origen de Vercel mediante `connectivity.txt`; `navigator.onLine` por sí solo no garantiza acceso a Internet.
+- Google Maps JavaScript no se carga si `VITE_ROUTE_API_URL` está vacío, si la aplicación detecta falta de conexión o si todavía no hay una ruta guardada/calculada. Esto evita solicitudes externas innecesarias durante el modo local.
+- Si Google Maps no responde aunque el sitio esté accesible, la vista vuelve al esquema local de la polilínea guardada.
+- El botón personalizado **Instalar app** usa `beforeinstallprompt`: Chrome suprime el aviso nativo automático porque la aplicación presenta su propio botón. El prompt se invoca únicamente cuando el usuario hace clic.
+- Se declara `mobile-web-app-capable` y se conserva el meta de Apple para compatibilidad con Safari en iOS.
+
 ## 5. Funcionamiento online / offline
+
+### Precarga real del shell
+
+El Service Worker se genera desde `vite.config.js` durante `npm run build`. El manifiesto de precarga incluye `index.html`, todos los assets de producción emitidos por Vite y los recursos públicos PWA. En la instalación, `cache.addAll()` debe completar correctamente antes de activar el worker. La navegación es network-first con fallback al HTML precargado; los assets versionados son cache-first.
+
+Después de publicar una versión nueva:
+
+1. Abrir la URL con Internet y esperar que termine la carga.
+2. Esperar el indicador **App offline preparada** en la barra superior.
+3. En Chrome/Edge, Application → Service Workers debe mostrar `/sw.js` como activated/running.
+4. En Application → Cache Storage debe existir `rutas-gastos-shell-*` con `index.html` y los archivos `/assets/...js` y `/assets/...css`.
+5. Recargar una vez online y luego probar offline. No usar “Clear site data” porque también elimina IndexedDB.
+
+Si la pestaña dice “Preparando modo offline”, no asumir que la aplicación ya está lista para abrir sin red. Revisar la instalación del worker y la caché.
+
 
 | Función | Offline | Online |
 |---|---:|---:|

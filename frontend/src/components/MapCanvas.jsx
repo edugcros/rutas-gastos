@@ -48,7 +48,7 @@ function decodePolyline(encoded) {
   return points;
 }
 
-function OfflineRouteSketch({ routes, selectedIndex, origin, destination }) {
+function OfflineRouteSketch({ routes, selectedIndex, origin, destination, online }) {
   const points = useMemo(() => decodePolyline(routes[selectedIndex]?.encodedPolyline), [routes, selectedIndex]);
   const sketch = useMemo(() => {
     if (points.length < 2) return null;
@@ -77,7 +77,7 @@ function OfflineRouteSketch({ routes, selectedIndex, origin, destination }) {
 
   return (
     <div className="offline-map-sketch">
-      <div className="offline-map-header"><WifiOff size={15} /><span>Esquema de polilínea guardada · sin cartografía base</span></div>
+      <div className="offline-map-header"><WifiOff size={15} /><span>{points.length >= 2 ? (online ? 'Esquema local de ruta guardada · sin cartografía base' : 'Ruta guardada disponible sin conexión') : 'Vista local · sin cartografía base'}</span></div>
       {sketch ? (
         <svg viewBox="0 0 1000 560" role="img" aria-label={`Esquema del recorrido desde ${origin} hasta ${destination}`}>
           <defs>
@@ -96,14 +96,14 @@ function OfflineRouteSketch({ routes, selectedIndex, origin, destination }) {
           </g>
         </svg>
       ) : (
-        <div className="offline-map-empty"><MapIcon size={24} /><strong>No hay geometría guardada para mostrar</strong><span>Con Internet, calculá y guardá una ruta. Después podrás consultar su resumen sin conexión.</span></div>
+        <div className="offline-map-empty"><MapIcon size={24} /><strong>No hay geometría guardada para mostrar</strong><span>Cuando el servicio de planificación esté conectado, calculá y guardá una ruta. Su trazado podrá consultarse después sin conexión.</span></div>
       )}
       <div className="offline-map-footer">El dibujo representa la forma aproximada de la polilínea guardada. No muestra calles, desvíos ni tráfico en tiempo real.</div>
     </div>
   );
 }
 
-export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, online = navigator.onLine }) {
+export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, online = navigator.onLine, allowOnlineMap = false }) {
   const elementRef = useRef(null);
   const mapRef = useRef(null);
   const overlaysRef = useRef([]);
@@ -111,15 +111,19 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
   const [mapReady, setMapReady] = useState(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const hasKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY);
+  const canLoadGoogleMaps = Boolean(online && allowOnlineMap && hasKey && routes.length > 0);
 
   useEffect(() => {
     let mounted = true;
-    if (!online || !hasKey) {
+    if (!canLoadGoogleMaps) {
       overlaysRef.current.forEach((overlay) => overlay.setMap(null));
       overlaysRef.current = [];
       setGoogleAvailable(false);
+      setMapReady(false);
+      setError('');
       return () => { mounted = false; };
     }
+
     setError('');
     loadMaps()
       .then(([mapsLib]) => {
@@ -131,12 +135,18 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
         setGoogleAvailable(Boolean(mapRef.current));
         setMapReady(true);
       })
-      .catch((loadError) => { if (mounted) { mapsPromise = null; setError(loadError.message); setGoogleAvailable(false); } });
+      .catch(() => {
+        if (mounted) {
+          mapsPromise = null;
+          setError('Google Maps no está disponible. Se conserva la vista local de la ruta guardada.');
+          setGoogleAvailable(false);
+        }
+      });
     return () => { mounted = false; };
-  }, [online, hasKey]);
+  }, [canLoadGoogleMaps]);
 
   useEffect(() => {
-    if (!online || !mapRef.current || !window.google?.maps || !googleAvailable) return;
+    if (!canLoadGoogleMaps || !mapRef.current || !window.google?.maps || !googleAvailable) return;
     overlaysRef.current.forEach((overlay) => overlay.setMap(null));
     overlaysRef.current = [];
     const bounds = new window.google.maps.LatLngBounds();
@@ -161,16 +171,15 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
     });
     if (!bounds.isEmpty()) mapRef.current.fitBounds(bounds, 48);
     else if (origin || destination) mapRef.current.setCenter({ lat: -34.6037, lng: -64.0 });
-  }, [routes, selectedIndex, origin, destination, mapReady, googleAvailable, online]);
+  }, [routes, selectedIndex, origin, destination, mapReady, googleAvailable, canLoadGoogleMaps]);
 
-  const showLocalSketch = !online || !hasKey || Boolean(error);
+  const showLocalSketch = !canLoadGoogleMaps || Boolean(error) || !googleAvailable;
   return (
     <div className="map-shell">
       <div ref={elementRef} className={`map-canvas ${showLocalSketch ? 'map-canvas-hidden' : ''}`} />
-      {showLocalSketch && <OfflineRouteSketch routes={routes} selectedIndex={selectedIndex} origin={origin} destination={destination} />}
+      {showLocalSketch && <OfflineRouteSketch routes={routes} selectedIndex={selectedIndex} origin={origin} destination={destination} online={online} />}
       {showLocalSketch && online && error && <div className="map-online-hint"><AlertTriangle size={14} />{error}</div>}
-      {!showLocalSketch && !googleAvailable && <div className="map-loading">Conectando con Google Maps…</div>}
-      {!showLocalSketch && googleAvailable && !routes.length && <div className="map-empty"><MapIcon size={24} /><strong>El recorrido aparecerá aquí</strong><span>Describí el viaje para calcular las alternativas.</span></div>}
+      {canLoadGoogleMaps && !showLocalSketch && !googleAvailable && <div className="map-loading">Conectando con Google Maps…</div>}
     </div>
   );
 }

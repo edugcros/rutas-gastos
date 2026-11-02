@@ -36,16 +36,65 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const onlineHandler = () => setOnline(true);
-    const offlineHandler = () => setOnline(false);
+    let active = true;
+    let currentController = null;
+
+    // navigator.onLine only reports the network interface state. A same-origin
+    // no-store request also verifies that this browser can actually reach the app.
+    const checkConnectivity = async () => {
+      if (!navigator.onLine) {
+        currentController?.abort();
+        currentController = null;
+        if (active) setOnline(false);
+        return;
+      }
+
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
+      const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+
+      try {
+        const response = await fetch(`/connectivity.txt?probe=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: controller.signal,
+        });
+        const reachable = response.ok && (await response.text()).trim() === 'ok';
+        if (active && currentController === controller) setOnline(reachable);
+      } catch {
+        if (active && currentController === controller) setOnline(false);
+      } finally {
+        window.clearTimeout(timeoutId);
+        if (currentController === controller) currentController = null;
+      }
+    };
+
+    const onlineHandler = () => { void checkConnectivity(); };
+    const offlineHandler = () => {
+      currentController?.abort();
+      if (active) setOnline(false);
+    };
     const installHandler = (event) => { event.preventDefault(); setInstallPrompt(event); };
+    const installedHandler = () => setInstallPrompt(null);
+
+    void checkConnectivity();
+    const probeInterval = window.setInterval(checkConnectivity, 30000);
     window.addEventListener('online', onlineHandler);
     window.addEventListener('offline', offlineHandler);
     window.addEventListener('beforeinstallprompt', installHandler);
+    window.addEventListener('appinstalled', installedHandler);
     return () => {
+      active = false;
+      currentController?.abort();
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      window.clearInterval(probeInterval);
       window.removeEventListener('online', onlineHandler);
       window.removeEventListener('offline', offlineHandler);
       window.removeEventListener('beforeinstallprompt', installHandler);
+      window.removeEventListener('appinstalled', installedHandler);
     };
   }, []);
 
@@ -134,8 +183,13 @@ export default function App() {
 
   async function installApp() {
     if (!installPrompt) return;
-    await installPrompt.prompt();
-    setInstallPrompt(null);
+    try {
+      // The browser requires prompt() to run directly from this user click.
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+    } finally {
+      setInstallPrompt(null);
+    }
   }
 
   if (!profileReady) return <div className="loading-panel app-initializing"><HardDrive size={22} />Preparando almacenamiento local...</div>;

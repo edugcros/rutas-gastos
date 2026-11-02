@@ -197,8 +197,8 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
           </section>
 
           <section className="panel map-panel">
-            <div className="map-heading"><div><span className="eyebrow">VISUALIZACIÓN</span><h2>Mapa del recorrido</h2></div><span className="map-provider">{online ? (import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY ? 'Google Maps' : 'Esquema local') : 'Vista local offline'}</span></div>
-            <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} online={online} />
+            <div className="map-heading"><div><span className="eyebrow">VISUALIZACIÓN</span><h2>Mapa del recorrido</h2></div><span className="map-provider">{online && ROUTE_SERVICE_CONFIGURED && import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY ? 'Google Maps' : online ? 'Esquema local' : 'Vista local offline'}</span></div>
+            <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} online={online} allowOnlineMap={ROUTE_SERVICE_CONFIGURED} />
             {activeRoute && <div className="map-summary"><div><span>Distancia</span><strong>{distance(activeRoute.distanceMeters)}</strong></div><div><span>Duración estimada</span><strong>{duration(activeRoute.durationSeconds)}</strong></div><div><span>Calzada</span><strong className="status-unknown">Sin verificar</strong></div></div>}
             {activeRoute?.legs?.some((leg) => leg.instructions?.length) && <details className="route-instructions">
               <summary>Ver indicaciones y nombres de vías</summary>

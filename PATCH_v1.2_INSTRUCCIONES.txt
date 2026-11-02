@@ -1,0 +1,36 @@
+RUTAS & GASTOS OFFLINE - PATCH v1.2
+
+OBJETIVO
+- Detectar conectividad real al origen de Vercel; navigator.onLine por sí solo no basta.
+- Evitar cargar Google Maps JS cuando VITE_ROUTE_API_URL no está configurada, no hay ruta o el sitio no tiene conectividad.
+- Mostrar fallback local cuando Google Maps no responde.
+- Agregar mobile-web-app-capable.
+- Mantener el botón propio de instalación PWA. El evento beforeinstallprompt se intercepta intencionalmente y prompt() se llama luego del clic del usuario.
+
+APLICAR
+1. Descomprimir este parche en la raíz del repositorio rutas-gastos y aceptar reemplazar los archivos.
+2. En Git Bash:
+   cd /d/Proyectos/rutas-gastos
+   cd frontend
+   npm run build
+   cd ..
+   git add -A
+   git commit -m "Improve offline connectivity and map fallback"
+   git push
+3. Esperar el despliegue Ready en Vercel.
+4. En Chrome, abrir DevTools > Application > Service Workers y usar Update/Skip waiting si aparece una actualización pendiente. Cerrar y volver a abrir la PWA.
+
+ARCHIVOS INCLUIDOS
+- README.md
+- frontend/index.html
+- frontend/public/connectivity.txt
+- frontend/src/App.jsx
+- frontend/src/components/MapCanvas.jsx
+- frontend/src/components/TripWorkspace.jsx
+- frontend/vercel.json
+
+IMPORTANTE
+- Esta corrección NO incorpora cálculo de rutas offline ni cartografía base offline.
+- Viajes, ingresos, gastos, saldos y rutas ya guardadas siguen siendo locales.
+- Gemini y Google Routes requieren el servicio remoto y conexión.
+- Si la clave de Maps aparece en el navegador, es una clave de navegador pública por diseño: restringirla por HTTP referrer a https://rutas-gastos.vercel.app/* y API restriction a Maps JavaScript API. No usar esa clave como secreto de backend.
