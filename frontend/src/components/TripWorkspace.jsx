@@ -291,7 +291,23 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
       <Tabs
         value={tab}
         onChange={(_, nextTab) => setTab(nextTab)}
-        sx={{ mb: 2.2, borderBottom: '1px solid #E4E8F2', '& .MuiTab-root': { px: { xs: 1, sm: 2 }, minWidth: 0, mr: { xs: 1.3, sm: 2 }, fontSize: { xs: 10, sm: 12 } } }}
+        variant="fullWidth"
+        sx={{
+          width: '100%',
+          maxWidth: { xs: '100%', sm: 480 },
+          mb: 2.2,
+          borderBottom: '1px solid #E4E8F2',
+          '& .MuiTab-root': {
+            flex: 1,
+            minWidth: 0,
+            minHeight: 50,
+            px: { xs: 0.5, sm: 2 },
+            mr: 0,
+            fontSize: { xs: 9.5, sm: 12 },
+            whiteSpace: 'nowrap',
+          },
+          '& .MuiTab-iconWrapper': { mr: { xs: 0.5, sm: 0.8 } },
+        }}
       >
         <Tab value="route" icon={<MapPinned size={17} />} iconPosition="start" label="Planificación de ruta" />
         <Tab value="expenses" icon={<Wallet size={17} />} iconPosition="start" label="Ingresos y gastos" />
@@ -303,7 +319,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
       </Stack>
 
       {tab === 'route' ? (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(320px,.82fr) minmax(0,1.38fr)' }, gridTemplateAreas: { xs: '"map" "controls"', lg: '"controls map"' }, gap: 1.8, alignItems: 'start' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(320px,.82fr) minmax(0,1.38fr)' }, gridTemplateAreas: { xs: '"controls" "map"', lg: '"controls map"' }, gap: 1.8, alignItems: 'start' }}>
           <Card sx={{ gridArea: 'controls', minWidth: 0 }}>
             <CardContent sx={{ p: { xs: 1.8, sm: 2.3 }, '&:last-child': { pb: { xs: 1.8, sm: 2.3 } } }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 2 }}>
@@ -425,7 +441,7 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
             </CardContent>
           </Card>
 
-          <Card sx={{ gridArea: 'map', minWidth: 0 }}>
+          <Card sx={{ gridArea: 'map', minWidth: 0, width: '100%' }}>
             <CardContent sx={{ p: { xs: 1.4, sm: 2 }, '&:last-child': { pb: { xs: 1.4, sm: 2 } } }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }}>
                 <Box>
@@ -434,7 +450,9 @@ export default function TripWorkspace({ tripId, online = navigator.onLine, onBac
                 </Box>
                 <Chip size="small" label={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'Google Maps' : online ? 'Esquema local' : 'Vista offline'} color={online && GOOGLE_MAPS_BROWSER_KEY_CONFIGURED ? 'success' : 'default'} variant="outlined" sx={{ fontSize: 9 }} />
               </Stack>
-              <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
+              <Box sx={{ minWidth: 0, width: '100%', overflow: 'hidden', borderRadius: 2.5 }}>
+                <MapCanvas routes={displayedRoutes} selectedIndex={selectedIndex} origin={currentTrip.origin} destination={currentTrip.destination} waypoints={currentTrip.waypoints || []} online={online} />
+              </Box>
               {activeRoute && (
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, mt: 1.5 }}>
                   <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.5, bgcolor: '#F4F6FF', borderColor: '#E3E8FB' }}>
