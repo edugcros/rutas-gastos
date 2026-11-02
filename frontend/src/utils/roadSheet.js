@@ -1,4 +1,5 @@
 import { dateLabel, distance, duration } from '../utils.js';
+import { CLOSURE_LABELS, CONFIDENCE_LABELS, SURFACE_LABELS, UNPAVED_LABELS, formatGeneratedAt } from './roadAnalysis.js';
 
 const DEFAULT_CAVEATS = [
   'La distancia y la duración son estimaciones de Google Routes y pueden variar.',
@@ -27,7 +28,8 @@ export function orderedStops(trip, route) {
 }
 
 /** Modelo del documento, sin dependencias de renderizado (testeable en Node). */
-export function buildRoadSheetModel(trip, route, { now = new Date() } = {}) {
+/** `analysis` es el resultado de analysisForRoute() para la alternativa elegida (o null). */
+export function buildRoadSheetModel(trip, route, { now = new Date(), analysis = null } = {}) {
   const stops = orderedStops(trip, route);
   const legs = (route.legs || []).map((leg, index) => ({
     title: `Tramo ${index + 1}`,
@@ -48,9 +50,19 @@ export function buildRoadSheetModel(trip, route, { now = new Date() } = {}) {
       label: index === 0 ? 'Origen' : index === stops.length - 1 ? 'Destino' : `Parada ${index}`,
       name,
     })),
+    condition: analysis ? {
+      summary: analysis.summary,
+      unpaved: UNPAVED_LABELS[analysis.unpavedLikelihood] || UNPAVED_LABELS.UNKNOWN,
+      segments: analysis.segments.map((segment) => ({ road: segment.road, surface: SURFACE_LABELS[segment.surface], confidence: CONFIDENCE_LABELS[segment.confidence], note: segment.note })),
+      closures: analysis.closures.map((closure) => ({ road: closure.road, status: CLOSURE_LABELS[closure.status], description: closure.description, asOf: closure.asOf })),
+      recommendations: analysis.recommendations,
+      avoidWarnings: analysis.avoidWarnings,
+      sources: analysis.sources,
+      asOf: formatGeneratedAt(analysis.generatedAt),
+    } : null,
     legs,
     totalSteps: legs.reduce((sum, leg) => sum + leg.instructions.length, 0),
-    caveats: DEFAULT_CAVEATS,
+    caveats: analysis ? [...DEFAULT_CAVEATS, 'El estado del camino fue analizado por una IA con búsqueda web: es orientativo, puede estar desactualizado y no reemplaza a las fuentes oficiales.'] : DEFAULT_CAVEATS,
   };
 }
 
@@ -81,9 +93,9 @@ const COLORS = {
 };
 
 /** Genera y descarga el PDF. jsPDF se carga bajo demanda para no pesar en el arranque. */
-export async function downloadRoadSheet(trip, route) {
+export async function downloadRoadSheet(trip, route, options = {}) {
   const { jsPDF } = await import('jspdf');
-  const model = buildRoadSheetModel(trip, route);
+  const model = buildRoadSheetModel(trip, route, options);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -156,6 +168,22 @@ export async function downloadRoadSheet(trip, route) {
   });
   y += 3;
   rule();
+
+  // Estado del camino (análisis IA)
+  if (model.condition) {
+    const c = model.condition;
+    write('Estado del camino', { size: 12, style: 'bold', gap: 1 });
+    write(`Análisis orientativo con IA${c.asOf ? ` (${c.asOf})` : ''}. ${c.unpaved}.`, { size: 9, color: COLORS.muted, gap: 2.5 });
+    if (c.summary) write(c.summary, { size: 10, gap: 3 });
+    c.avoidWarnings.forEach((item) => write(`ATENCIÓN: ${item}`, { size: 10, style: 'bold', color: [180, 35, 24], gap: 2 }));
+    c.closures.forEach((closure) => write(`${closure.status.toUpperCase()} - ${closure.road}: ${closure.description}${closure.asOf ? ` (${closure.asOf})` : ''}`, { size: 9.5, style: 'bold', color: [181, 71, 8], x: margin + 2, width: contentWidth - 4, gap: 1.6 }));
+    c.segments.forEach((segment) => write(`${segment.road}: ${segment.surface} (${segment.confidence.toLowerCase()})${segment.note ? ` - ${segment.note}` : ''}`, { size: 9.5, x: margin + 2, width: contentWidth - 4, gap: 1.4 }));
+    if (c.recommendations.length) write('Recomendaciones', { size: 10, style: 'bold', gap: 1.2 });
+    c.recommendations.forEach((item) => write(`-  ${item}`, { size: 9.5, x: margin + 2, width: contentWidth - 4, gap: 1.2 }));
+    if (c.sources.length) write(`Fuentes consultadas: ${c.sources.map((source) => source.title).join('; ')}`, { size: 8, color: COLORS.muted, gap: 2 });
+    y += 2;
+    rule();
+  }
 
   // Indicaciones por tramo
   write('Indicaciones por tramo', { size: 12, style: 'bold', gap: 3 });
