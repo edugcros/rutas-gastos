@@ -47,6 +47,39 @@ const statusMeta = {
   CANCELLED: { label: 'Cancelado', color: 'error' },
 };
 
+const mobileNavItemSx = {
+  flex: 1,
+  minWidth: 0,
+  minHeight: 58,
+  px: 0.5,
+  py: 0.75,
+  flexDirection: 'column',
+  justifyContent: 'center',
+  gap: 0.35,
+  color: 'rgba(232,236,255,.78)',
+  borderRadius: 2.5,
+  '& .MuiListItemIcon-root': {
+    minWidth: 0,
+    color: 'inherit',
+    mb: 0,
+    justifyContent: 'center',
+  },
+  '& .MuiListItemText-root': { m: 0 },
+  '& .MuiListItemText-primary': {
+    color: 'inherit',
+    fontSize: 9,
+    fontWeight: 750,
+    lineHeight: 1.15,
+    textAlign: 'center',
+    whiteSpace: 'nowrap',
+  },
+  '&.Mui-selected': {
+    color: '#fff',
+    bgcolor: 'rgba(255,255,255,.16)',
+  },
+  '&.Mui-selected:hover': { bgcolor: 'rgba(255,255,255,.20)' },
+};
+
 function MetricCard({ label, value, icon: Icon, gradient, hint }) {
   return (
     <Card
@@ -351,10 +384,12 @@ export default function App() {
           position: 'fixed',
           zIndex: 1200,
           inset: '0 auto 0 0',
-          width: { xs: 76, md: 252 },
-          display: 'flex',
+          width: { sm: 76, md: 252 },
+          minHeight: '100dvh',
+          display: { xs: 'none', sm: 'flex' },
           flexDirection: 'column',
-          p: { xs: 1, md: 2 },
+          overflowY: 'auto',
+          p: { sm: 1, md: 2 },
           color: '#E6E9FF',
           border: 0,
           borderRadius: 0,
@@ -450,7 +485,62 @@ export default function App() {
         </Box>
       </Paper>
 
-      <Box component="main" sx={{ ml: { xs: '76px', md: '252px' }, width: { xs: 'calc(100% - 76px)', md: 'calc(100% - 252px)' }, minWidth: 0 }}>
+      <Paper
+        component="nav"
+        aria-label="Navegación principal"
+        elevation={0}
+        sx={{
+          display: { xs: 'flex', sm: 'none' },
+          position: 'fixed',
+          zIndex: 1300,
+          inset: 'auto 0 0',
+          alignItems: 'stretch',
+          justifyContent: 'space-around',
+          gap: 0.5,
+          px: 1,
+          pt: 1,
+          pb: 'max(8px, env(safe-area-inset-bottom))',
+          minHeight: 'calc(72px + env(safe-area-inset-bottom))',
+          border: '1px solid rgba(255,255,255,.12)',
+          borderBottom: 0,
+          borderRadius: '18px 18px 0 0',
+          color: '#fff',
+          background: 'linear-gradient(115deg, #202C76 0%, #303C9B 55%, #27316F 100%)',
+          boxShadow: '0 -8px 30px rgba(32,44,118,.20)',
+        }}
+      >
+        <ListItemButton
+          selected={!selectedTripId}
+          onClick={() => setSelectedTripId(null)}
+          aria-label="Ir a mis viajes"
+          sx={mobileNavItemSx}
+        >
+          <ListItemIcon><RouteIcon size={19} /></ListItemIcon>
+          <ListItemText primary="Viajes" />
+        </ListItemButton>
+        <ListItemButton onClick={exportBackup} aria-label="Exportar copia de seguridad" sx={mobileNavItemSx}>
+          <ListItemIcon><Download size={19} /></ListItemIcon>
+          <ListItemText primary="Exportar" />
+        </ListItemButton>
+        <ListItemButton onClick={() => fileInputRef.current?.click()} aria-label="Restaurar copia de seguridad" sx={mobileNavItemSx}>
+          <ListItemIcon><Upload size={19} /></ListItemIcon>
+          <ListItemText primary="Restaurar" />
+        </ListItemButton>
+        <ListItemButton onClick={editLocalProfile} aria-label="Editar perfil local" sx={mobileNavItemSx}>
+          <ListItemIcon><HardDrive size={19} /></ListItemIcon>
+          <ListItemText primary="Perfil" />
+        </ListItemButton>
+      </Paper>
+
+      <Box
+        component="main"
+        sx={{
+          ml: { xs: 0, sm: '76px', md: '252px' },
+          width: { xs: '100%', sm: 'calc(100% - 76px)', md: 'calc(100% - 252px)' },
+          minWidth: 0,
+          pb: { xs: 'calc(88px + env(safe-area-inset-bottom))', sm: 0 },
+        }}
+      >
         <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'rgba(255,255,255,.88)', borderBottom: '1px solid #E8EAF3', backdropFilter: 'blur(18px)' }}>
           <Toolbar sx={{ minHeight: { xs: '62px !important', md: '70px !important' }, px: { xs: 1.5, sm: 2.5, lg: 4 }, gap: 1.2, justifyContent: 'space-between' }}>
             <Stack direction="row" alignItems="center" spacing={.8} sx={{ minWidth: 0 }}>
@@ -575,13 +665,29 @@ export default function App() {
         )}
       </Box>
 
-      <Dialog open={creating} onClose={() => setCreating(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 4, overflow: 'hidden' } }}>
+      <Dialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            m: { xs: 0, sm: 2 },
+            width: { xs: '100%', sm: 'calc(100% - 64px)' },
+            maxWidth: { xs: 'none', sm: 600 },
+            minHeight: { xs: '100dvh', sm: 'auto' },
+            maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' },
+            borderRadius: { xs: 0, sm: 4 },
+            overflow: 'hidden',
+          },
+        }}
+      >
         <Box sx={{ px: 3, pt: 2.8, pb: 2.1, color: '#fff', background: 'linear-gradient(115deg,#4E5FD2,#7866DF 58%,#C35FA8)' }}>
           <Typography sx={{ color: 'rgba(255,255,255,.78)', fontSize: 9, fontWeight: 850, letterSpacing: 1.3 }}>NUEVO REGISTRO LOCAL</Typography>
           <Typography component="h2" sx={{ mt: .6, fontSize: 22, fontWeight: 900 }}>Crear viaje</Typography>
         </Box>
         <Box component="form" onSubmit={createTrip}>
-          <DialogContent sx={{ display: 'grid', gap: 2, p: 3 }}>
+          <DialogContent sx={{ display: 'grid', gap: 2, p: { xs: 2, sm: 3 }, overflowY: 'auto' }}>
             <TextField fullWidth label="Nombre del viaje" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required slotProps={{ htmlInput: { minLength: 2, maxLength: 140 } }} placeholder="Ej.: Traslado de noviembre" />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.7 }}>
               <TextField fullWidth label="Origen" value={form.origin} onChange={(event) => setForm((prev) => ({ ...prev, origin: event.target.value }))} required placeholder="Ciudad o dirección" />
@@ -628,7 +734,7 @@ export default function App() {
               </TextField>
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, pt: 1, gap: 1, flexDirection: { xs: 'column', sm: 'row' }, '& > .MuiButton-root': { width: { xs: '100%', sm: 'auto' } } }}>
             <Button type="button" color="inherit" variant="outlined" onClick={() => setCreating(false)}>Cancelar</Button>
             <Button type="submit" variant="contained" endIcon={<ChevronRight size={17} />}>Crear viaje</Button>
           </DialogActions>
