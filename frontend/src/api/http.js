@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ROUTE_API_URL } from '../config/services.js';
 import {
   createLocalExpense,
   createLocalTrip,
@@ -10,9 +11,8 @@ import {
   updateLocalTrip,
 } from '../data/localStore.js';
 
-const routeServiceUrl = (import.meta.env.VITE_ROUTE_API_URL || '').trim();
-const routeClient = routeServiceUrl
-  ? axios.create({ baseURL: routeServiceUrl.replace(/\/$/, ''), timeout: 60_000, headers: { 'Content-Type': 'application/json' } })
+const routeClient = ROUTE_API_URL
+  ? axios.create({ baseURL: ROUTE_API_URL, timeout: 60_000, headers: { 'Content-Type': 'application/json' } })
   : null;
 
 function response(data) { return { data, status: 200, headers: {}, config: {} }; }

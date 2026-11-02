@@ -1,10 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import App from './App.jsx';
+import theme from './theme.js';
 import './styles/global.css';
+import './styles/visual-system.css';
 
 // Register early. The generated worker precaches the complete production shell,
-// not just index.html, so a later cold start can load while offline.
+// including the MUI/Emotion chunks emitted by Vite.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js', {
     scope: '/',
@@ -16,6 +19,9 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <App />
+    </ThemeProvider>
   </React.StrictMode>,
 );

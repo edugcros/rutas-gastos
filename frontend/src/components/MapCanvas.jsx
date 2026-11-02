@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Map as MapIcon, WifiOff } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 
+const EMPTY_WAYPOINTS = [];
 let mapsConfigured = false;
 let mapsPromise;
 
 async function loadMaps() {
-  const key = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY;
+  const key = String(import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY || '').trim();
   if (!key) throw new Error('Google Maps no está configurado en esta instalación.');
   if (!mapsConfigured) {
     setOptions({ key, v: 'weekly' });
@@ -103,15 +104,18 @@ function OfflineRouteSketch({ routes, selectedIndex, origin, destination, online
   );
 }
 
-export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, online = navigator.onLine, allowOnlineMap = false }) {
+export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, waypoints = EMPTY_WAYPOINTS, online = navigator.onLine }) {
   const elementRef = useRef(null);
   const mapRef = useRef(null);
   const overlaysRef = useRef([]);
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
-  const hasKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY);
-  const canLoadGoogleMaps = Boolean(online && allowOnlineMap && hasKey && routes.length > 0);
+  const [mapLoading, setMapLoading] = useState(false);
+  const hasKey = Boolean(String(import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY || '').trim());
+  // La cartografía base debe mostrarse aunque todavía no haya una ruta calculada.
+  // El cálculo de rutas y la visualización del mapa son capacidades independientes.
+  const canLoadGoogleMaps = Boolean(online && hasKey);
 
   useEffect(() => {
     let mounted = true;
@@ -120,11 +124,13 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
       overlaysRef.current = [];
       setGoogleAvailable(false);
       setMapReady(false);
+      setMapLoading(false);
       setError('');
       return () => { mounted = false; };
     }
 
     setError('');
+    setMapLoading(true);
     loadMaps()
       .then(([mapsLib]) => {
         if (!mounted || !elementRef.current) return;
@@ -134,12 +140,14 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
         });
         setGoogleAvailable(Boolean(mapRef.current));
         setMapReady(true);
+        setMapLoading(false);
       })
       .catch(() => {
         if (mounted) {
           mapsPromise = null;
-          setError('Google Maps no está disponible. Se conserva la vista local de la ruta guardada.');
+          setError('Google Maps no está disponible. Verificá la clave de navegador, sus restricciones HTTP referrer y que Maps JavaScript API esté habilitada. Se conserva la vista local.');
           setGoogleAvailable(false);
+          setMapLoading(false);
         }
       });
     return () => { mounted = false; };
@@ -150,6 +158,11 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
     overlaysRef.current.forEach((overlay) => overlay.setMap(null));
     overlaysRef.current = [];
     const bounds = new window.google.maps.LatLngBounds();
+    if (!routes.length) {
+      mapRef.current.setCenter({ lat: -35.5, lng: -64.0 });
+      mapRef.current.setZoom(4);
+      return;
+    }
     routes.forEach((route, index) => {
       try {
         const path = window.google.maps.geometry.encoding.decodePath(route.encodedPolyline);
@@ -166,20 +179,38 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
           const start = new window.google.maps.Marker({ map: mapRef.current, position: path[0], label: 'A', title: 'Origen' });
           const end = new window.google.maps.Marker({ map: mapRef.current, position: path[path.length - 1], label: 'B', title: 'Destino' });
           overlaysRef.current.push(start, end);
+
+          (route.legs || []).slice(0, -1).forEach((leg, waypointIndex) => {
+            const coordinates = leg.endLocation?.latLng;
+            const latitude = Number(coordinates?.latitude);
+            const longitude = Number(coordinates?.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+            const marker = new window.google.maps.Marker({
+              map: mapRef.current,
+              position: { lat: latitude, lng: longitude },
+              label: String(waypointIndex + 1),
+              title: waypoints[waypointIndex] || `Parada intermedia ${waypointIndex + 1}`,
+            });
+            overlaysRef.current.push(marker);
+          });
         }
       } catch { /* Una polilínea inválida no derriba el resto de la vista. */ }
     });
     if (!bounds.isEmpty()) mapRef.current.fitBounds(bounds, 48);
     else if (origin || destination) mapRef.current.setCenter({ lat: -34.6037, lng: -64.0 });
-  }, [routes, selectedIndex, origin, destination, mapReady, googleAvailable, canLoadGoogleMaps]);
+  }, [routes, selectedIndex, origin, destination, waypoints, mapReady, googleAvailable, canLoadGoogleMaps]);
 
-  const showLocalSketch = !canLoadGoogleMaps || Boolean(error) || !googleAvailable;
+  // Mientras la API carga, mantenemos visible el contenedor para que Google Maps
+  // pueda medirlo. Si se oculta con display:none durante la inicialización, el mapa
+  // puede quedar en blanco al mostrarse posteriormente.
+  const showLocalSketch = !canLoadGoogleMaps || Boolean(error);
   return (
     <div className="map-shell">
       <div ref={elementRef} className={`map-canvas ${showLocalSketch ? 'map-canvas-hidden' : ''}`} />
       {showLocalSketch && <OfflineRouteSketch routes={routes} selectedIndex={selectedIndex} origin={origin} destination={destination} online={online} />}
+      {canLoadGoogleMaps && mapLoading && <div className="map-loading" role="status">Conectando con Google Maps…</div>}
+      {showLocalSketch && online && !hasKey && <div className="map-online-hint"><AlertTriangle size={14} />Configurá VITE_GOOGLE_MAPS_BROWSER_KEY en Vercel para mostrar la cartografía de Google.</div>}
       {showLocalSketch && online && error && <div className="map-online-hint"><AlertTriangle size={14} />{error}</div>}
-      {canLoadGoogleMaps && !showLocalSketch && !googleAvailable && <div className="map-loading">Conectando con Google Maps…</div>}
     </div>
   );
 }

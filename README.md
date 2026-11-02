@@ -23,10 +23,11 @@ IndexedDB local A                       IndexedDB local B
 
 - Cada perfil de navegador/dispositivo tiene una base IndexedDB propia.
 - No existe sincronización automática entre computadoras; los datos son deliberadamente independientes.
+- Los viajes admiten origen, destino y hasta 10 paradas intermedias (ciudades o provincias), en el orden definido por el usuario. Las ubicaciones se almacenan localmente y se incluyen en los respaldos.
 - Los viajes, gastos, ingresos, liquidaciones y rutas ya guardadas funcionan sin conexión.
 - El Service Worker generado durante el build precachea el HTML, todos los chunks JS/CSS de Vite, fuentes, imágenes, iconos y manifest. La instalación offline se considera completa cuando la caché de precarga termina.
-- Gemini y Google Routes solo se invocan cuando hay conexión y está configurado `VITE_ROUTE_API_URL`.
-- Google Maps JavaScript requiere conexión. Sin ella se muestra un esquema SVG construido a partir de la polilínea guardada; no se simula cartografía base ni tráfico.
+- Gemini y Google Routes se invocan cuando hay conexión. El frontend usa por defecto `https://rutas-gastos-route-service.onrender.com/api`; `VITE_ROUTE_API_URL` solo es necesario como override si cambia la URL del servicio.
+- Google Maps JavaScript requiere conexión y `VITE_GOOGLE_MAPS_BROWSER_KEY`. La cartografía base se carga independientemente de que exista una ruta calculada o de que el servicio Gemini/Routes esté disponible. Sin conexión se muestra un esquema SVG de las polilíneas guardadas; no se simula cartografía base ni tráfico.
 
 ## 2. Instalación para usuarios finales (sin Docker ni Node)
 
@@ -85,8 +86,8 @@ No se envían a Gemini ni a Google los gastos, balances, comprobantes ni la base
 ## Verificación de conectividad y carga de mapas
 
 - La etiqueta de conexión verifica el acceso real al origen de Vercel mediante `connectivity.txt`; `navigator.onLine` por sí solo no garantiza acceso a Internet.
-- Google Maps JavaScript no se carga si `VITE_ROUTE_API_URL` está vacío, si la aplicación detecta falta de conexión o si todavía no hay una ruta guardada/calculada. Esto evita solicitudes externas innecesarias durante el modo local.
-- Si Google Maps no responde aunque el sitio esté accesible, la vista vuelve al esquema local de la polilínea guardada.
+- Google Maps JavaScript se carga cuando hay conexión y existe `VITE_GOOGLE_MAPS_BROWSER_KEY`, aunque todavía no haya rutas guardadas. La visualización cartográfica es independiente del endpoint que calcula rutas.
+- Si Google Maps no responde aunque el sitio esté accesible, la vista vuelve al esquema local de la polilínea guardada y muestra el diagnóstico de configuración.
 - El botón personalizado **Instalar app** usa `beforeinstallprompt`: Chrome suprime el aviso nativo automático porque la aplicación presenta su propio botón. El prompt se invoca únicamente cuando el usuario hace clic.
 - Se declara `mobile-web-app-capable` y se conserva el meta de Apple para compatibilidad con Safari en iOS.
 
@@ -171,14 +172,19 @@ El archivo `render.yaml` contiene el servicio `rutas-gastos-route-service`. Al c
 2. Configurar `APP_ORIGINS` con el origen HTTPS real del frontend.
 3. Mantener `TRUST_PROXY_HOPS=1` solo detrás del proxy de Render.
 4. Configurar cuotas, alertas de facturación y límites de uso en Google Cloud y Gemini. Restringir la clave de Routes a la IP de salida del servicio; usar un hosting con egreso IP estable o una arquitectura de egreso estático.
-5. Copiar la URL terminada en `/api` a `VITE_ROUTE_API_URL` antes de compilar el frontend.
+5. El frontend incluye la URL pública predeterminada de Render. Si se cambia el nombre/dominio del servicio, configurar el override `VITE_ROUTE_API_URL` en el entorno de compilación.
 
-Ejemplo de frontend `.env` en el momento del build:
+Variables del frontend en Vercel (Production):
 
 ```env
+# Opcional: solo si cambia el endpoint predeterminado de Render.
 VITE_ROUTE_API_URL=https://tu-servicio.onrender.com/api
+
+# Necesaria para cartografía base de Google Maps en el navegador.
 VITE_GOOGLE_MAPS_BROWSER_KEY=CLAVE_PUBLICA_RESTRINGIDA_POR_HTTP_REFERRER
 ```
+
+Si no se define `VITE_ROUTE_API_URL`, se usa la URL predeterminada del servicio Rutas & Gastos. `VITE_GOOGLE_MAPS_BROWSER_KEY` sí debe configurarse para mostrar Google Maps; restringirla por HTTP referrer y exclusivamente a Maps JavaScript API.
 
 `VITE_GOOGLE_MAPS_BROWSER_KEY` es pública por definición: restringirla por HTTP referrer y exclusivamente a Maps JavaScript API. No colocar claves privadas en el frontend.
 
@@ -241,6 +247,9 @@ rutas-gastos/
 │       │   ├── AuthScreen.jsx       # Alta del perfil local
 │       │   ├── MapCanvas.jsx        # Google Maps online / polilínea local offline
 │       │   └── TripWorkspace.jsx
+│       ├── styles/
+│       │   ├── global.css
+│       │   └── visual-system.css
 │       └── App.jsx
 ├── backend/
 │   ├── src/routeServer.js           # Servicio remoto sin MongoDB
@@ -249,6 +258,20 @@ rutas-gastos/
 │   └── scripts/export-local-backup.js
 └── render.yaml
 ```
+
+### Interfaz Material UI
+
+- La interfaz de alta local, dashboard, navegación, tarjetas, planificación, finanzas, formularios y diálogos utiliza componentes reales de Material UI.
+- `frontend/src/theme.js` centraliza la paleta, tipografía, radios, estados y degradados mediante `createTheme`.
+- `frontend/src/main.jsx` registra `ThemeProvider` y `CssBaseline`; la lógica de negocio continúa separada de la presentación.
+- Material UI utiliza Emotion como motor de estilos. Los paquetes se declaran en `frontend/package.json`; luego de actualizar dependencias debe mantenerse sincronizado `frontend/package-lock.json` mediante `npm install`.
+- No se importan fuentes ni iconos externos en runtime: los iconos actuales se mantienen con Lucide y se representan dentro de los componentes MUI.
+
+### Sistema visual
+
+- `frontend/src/styles/global.css` conserva las reglas base y los selectores estructurales existentes.
+- `frontend/src/styles/visual-system.css` se carga después y concentra la capa visual de producción (tokens, jerarquía, superficies, controles y breakpoints).
+- La capa visual no contiene dependencias remotas ni cambia el árbol de componentes, los flujos, el modelo local o el contrato del servicio de planificación.
 
 ## 11. Limitaciones y próximos controles
 
