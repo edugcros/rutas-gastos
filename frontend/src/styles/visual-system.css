@@ -1359,6 +1359,10 @@ textarea {
 }
 
 @media (max-width: 850px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+
   .auth-visual {
     min-height: 270px;
     padding: 26px 30px;
