@@ -237,21 +237,6 @@ export const TUNING_LIMITS = {
 };
 
 /** Valores efectivos de un estilo: los del estilo más los ajustes guardados, siempre dentro de rango. */
-export function styleParts(styleId, text, voice = null, overrides = {}) {
-  const style = VOICE_STYLES.find((item) => item.id === styleId) || VOICE_STYLES[0];
-  const pitch = Number.isFinite(overrides.pitch) ? overrides.pitch : style.pitch;
-  const melody = Number.isFinite(overrides.melody) ? overrides.melody : 1;
-
-  if (styleId === 'colombiana') {
-    const phonetic = needsSeseo(voice) ? seseo(voseo(text)) : voseo(text);
-    return melodicParts(phonetic, { pitch, melody });
-  }
-
-  return [{ text: styleText(styleId, text), pitch, rateFactor: 1 }];
-}
-
-
-/** Valores efectivos de un estilo: los del estilo más los ajustes guardados, siempre dentro de rango. */
 export function effectiveStyle(style, tuning = {}) {
   const clamp = (key, value, fallback) => {
     const { min, max } = TUNING_LIMITS[key];
