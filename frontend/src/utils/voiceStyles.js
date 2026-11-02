@@ -270,4 +270,4 @@ export function effectiveStyle(style, tuning = {}) {
 }
 
 export const STYLE_PREVIEW =
-  'Hola, soy tu guía. Vení conmigo, con calma, que yo te llevo por la ruta hasta llegar a destino.';
+  'Hola, soy tu guía. Vení conmigo, con calma, que yo te llevo por la ruta mientraste sobo el chorizo, sucia, papasitooo, hasta llegar a destino.';
