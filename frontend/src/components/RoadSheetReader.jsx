@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Alert, Box, Button, LinearProgress, MenuItem, TextField, Typography } from '@mui/material';
-import { Mic, Pause, Play, Repeat, SkipBack, SkipForward, Square, Volume2 } from 'lucide-react';
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, LinearProgress, MenuItem, Slider, TextField, Typography } from '@mui/material';
+import { ChevronDown, Mic, Pause, Play, Repeat, SkipBack, SkipForward, Square, Volume2 } from 'lucide-react';
 import { useSpeechReader } from '../hooks/useSpeechReader.js';
 import { buildSpeechScript } from '../utils/speech.js';
+import { TUNING_LIMITS } from '../utils/voiceStyles.js';
 import { tokens } from '../theme.js';
 import { Section, Stack } from './ui.jsx';
 
@@ -29,7 +30,7 @@ const STATUS_TEXT = { idle: 'Lista para leer', playing: 'Leyendo', paused: 'En p
 export default function RoadSheetReader({ model, startSignal = 0 }) {
   const segments = useMemo(() => buildSpeechScript(model), [model]);
   const reader = useSpeechReader(segments);
-  const { supported, status, index, total, current, voices, voiceURI, rate, styles, styleId, styleVoice, styleMatch, play, pause, stop, next, previous, repeat, setRate, setVoiceURI, setStyleId, preview } = reader;
+  const { supported, status, index, total, current, voices, voiceURI, rate, styles, styleId, styleVoice, styleMatch, tuning, tuned, setTuning, resetTuning, play, pause, stop, next, previous, repeat, setRate, setVoiceURI, setStyleId, preview } = reader;
   const regionRef = useRef(null);
   const lastSignalRef = useRef(startSignal);
 
@@ -122,6 +123,32 @@ export default function RoadSheetReader({ model, startSignal = 0 }) {
           </TextField>
           <Button variant="outlined" onClick={preview} startIcon={<Mic size={16} />} aria-label="Probar la voz elegida" sx={{ minHeight: 40 }}>Probar voz</Button>
         </Box>
+
+        {styleId !== 'standard' && (
+          <Accordion disableGutters elevation={0} sx={{ mt: 2, border: `1px solid ${tokens.line}`, borderRadius: '10px !important', overflow: 'hidden' }}>
+            <AccordionSummary expandIcon={<ChevronDown size={18} />} aria-controls="afinar-voz" id="afinar-voz-header">
+              <Typography variant="subtitle2">Afinar voz{tuned ? ' · personalizada' : ''}</Typography>
+            </AccordionSummary>
+            <AccordionDetails id="afinar-voz" sx={{ pt: 0 }}>
+              <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                Mové los controles y tocá "Probar voz" hasta que suene como querés. Se guarda en este dispositivo.
+              </Typography>
+              {Object.entries(TUNING_LIMITS).map(([key, limit]) => (
+                <Box key={key} sx={{ mb: 1 }}>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body2" id={`tuning-${key}`}>{limit.label}</Typography>
+                    <Typography variant="body2" className="tabular" color="textSecondary">{tuning[key].toFixed(2)}</Typography>
+                  </Stack>
+                  <Slider size="small" min={limit.min} max={limit.max} step={limit.step} value={tuning[key]} onChange={(_, value) => setTuning({ [key]: value })} aria-labelledby={`tuning-${key}`} />
+                </Box>
+              ))}
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="outlined" onClick={preview} startIcon={<Mic size={15} />}>Probar voz</Button>
+                <Button size="small" variant="text" onClick={resetTuning} disabled={!tuned}>Restablecer</Button>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+        )}
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: voices.length > 1 && styleId === 'standard' ? '1fr 1fr' : '1fr' }, gap: 1.5, mt: 2 }}>
           <TextField select size="small" label="Velocidad de lectura" value={rate} onChange={(event) => setRate(Number(event.target.value))}>

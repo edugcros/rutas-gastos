@@ -195,7 +195,7 @@ export function splitPhrases(text) {
  */
 const RISES = [0.04, 0.02, 0.05, 0.03];
 
-export function melodicParts(text, { pitch = 1, rate = 1 } = {}) {
+export function melodicParts(text, { pitch = 1, melody = 1 } = {}) {
   const parts = [];
   splitPhrases(text).forEach((phrases) => {
     phrases.forEach((phrase, position) => {
@@ -203,7 +203,7 @@ export function melodicParts(text, { pitch = 1, rate = 1 } = {}) {
       const question = /\?$/.test(phrase);
       parts.push({
         text: phrase,
-        pitch: Math.min(2, Math.max(0.1, last ? (question ? pitch + 0.05 : pitch - 0.04) : pitch + RISES[position % RISES.length])),
+        pitch: Math.min(2, Math.max(0.1, last ? (question ? pitch + 0.05 * melody : pitch - 0.04 * melody) : pitch + RISES[position % RISES.length] * melody)),
         rateFactor: last ? 0.96 : 1,
       });
     });
@@ -217,13 +217,38 @@ const needsSeseo = (voice) => /^es-es$/i.test(String(voice?.lang || '').replace(
  * Lo que se pronuncia para un segmento: lista de tramos con su propio tono y velocidad.
  * @returns {{text: string, pitch: number, rateFactor: number}[]}
  */
-export function styleParts(styleId, text, voice = null) {
+export function styleParts(styleId, text, voice = null, overrides = {}) {
   const style = VOICE_STYLES.find((item) => item.id === styleId) || VOICE_STYLES[0];
+  const pitch = Number.isFinite(overrides.pitch) ? overrides.pitch : style.pitch;
+  const melody = Number.isFinite(overrides.melody) ? overrides.melody : 1;
   if (styleId === 'colombiana') {
     const phonetic = needsSeseo(voice) ? seseo(voseo(text)) : voseo(text);
-    return melodicParts(phonetic, { pitch: style.pitch });
+    return melodicParts(phonetic, { pitch, melody });
   }
-  return [{ text: styleText(styleId, text), pitch: style.pitch, rateFactor: 1 }];
+  return [{ text: styleText(styleId, text), pitch, rateFactor: 1 }];
+}
+
+/** Rangos de los controles de "Afinar voz" (también limitan lo que se guarda). */
+export const TUNING_LIMITS = {
+  pitch: { min: 0.7, max: 1.5, step: 0.01, label: 'Tono (agudo ↔ grave)' },
+  rate: { min: 0.6, max: 1.3, step: 0.01, label: 'Velocidad' },
+  volume: { min: 0.4, max: 1, step: 0.01, label: 'Suavidad (volumen)' },
+  melody: { min: 0, max: 2.5, step: 0.05, label: 'Melodía (entonación cantada)' },
+};
+
+/** Valores efectivos de un estilo: los del estilo más los ajustes guardados, siempre dentro de rango. */
+export function effectiveStyle(style, tuning = {}) {
+  const clamp = (key, value, fallback) => {
+    const { min, max } = TUNING_LIMITS[key];
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+  };
+  return {
+    ...style,
+    pitch: clamp('pitch', tuning.pitch, style.pitch),
+    rate: clamp('rate', tuning.rate, style.rate),
+    volume: clamp('volume', tuning.volume, style.volume),
+    melody: clamp('melody', tuning.melody, 1),
+  };
 }
 
 export const STYLE_PREVIEW = 'Hola, soy tu guía. Vení conmigo, con calma, que yo te llevo por la ruta hasta llegar a destino.';
