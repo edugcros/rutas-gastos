@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Map as MapIcon, WifiOff } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 
+const EMPTY_WAYPOINTS = [];
 let mapsConfigured = false;
 let mapsPromise;
 
@@ -103,7 +104,7 @@ function OfflineRouteSketch({ routes, selectedIndex, origin, destination, online
   );
 }
 
-export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, online = navigator.onLine }) {
+export default function MapCanvas({ routes = [], selectedIndex = 0, origin, destination, waypoints = EMPTY_WAYPOINTS, online = navigator.onLine }) {
   const elementRef = useRef(null);
   const mapRef = useRef(null);
   const overlaysRef = useRef([]);
@@ -178,12 +179,26 @@ export default function MapCanvas({ routes = [], selectedIndex = 0, origin, dest
           const start = new window.google.maps.Marker({ map: mapRef.current, position: path[0], label: 'A', title: 'Origen' });
           const end = new window.google.maps.Marker({ map: mapRef.current, position: path[path.length - 1], label: 'B', title: 'Destino' });
           overlaysRef.current.push(start, end);
+
+          (route.legs || []).slice(0, -1).forEach((leg, waypointIndex) => {
+            const coordinates = leg.endLocation?.latLng;
+            const latitude = Number(coordinates?.latitude);
+            const longitude = Number(coordinates?.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+            const marker = new window.google.maps.Marker({
+              map: mapRef.current,
+              position: { lat: latitude, lng: longitude },
+              label: String(waypointIndex + 1),
+              title: waypoints[waypointIndex] || `Parada intermedia ${waypointIndex + 1}`,
+            });
+            overlaysRef.current.push(marker);
+          });
         }
       } catch { /* Una polilínea inválida no derriba el resto de la vista. */ }
     });
     if (!bounds.isEmpty()) mapRef.current.fitBounds(bounds, 48);
     else if (origin || destination) mapRef.current.setCenter({ lat: -34.6037, lng: -64.0 });
-  }, [routes, selectedIndex, origin, destination, mapReady, googleAvailable, canLoadGoogleMaps]);
+  }, [routes, selectedIndex, origin, destination, waypoints, mapReady, googleAvailable, canLoadGoogleMaps]);
 
   // Mientras la API carga, mantenemos visible el contenedor para que Google Maps
   // pueda medirlo. Si se oculta con display:none durante la inicialización, el mapa

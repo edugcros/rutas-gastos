@@ -23,6 +23,7 @@ IndexedDB local A                       IndexedDB local B
 
 - Cada perfil de navegador/dispositivo tiene una base IndexedDB propia.
 - No existe sincronización automática entre computadoras; los datos son deliberadamente independientes.
+- Los viajes admiten origen, destino y hasta 10 paradas intermedias (ciudades o provincias), en el orden definido por el usuario. Las ubicaciones se almacenan localmente y se incluyen en los respaldos.
 - Los viajes, gastos, ingresos, liquidaciones y rutas ya guardadas funcionan sin conexión.
 - El Service Worker generado durante el build precachea el HTML, todos los chunks JS/CSS de Vite, fuentes, imágenes, iconos y manifest. La instalación offline se considera completa cuando la caché de precarga termina.
 - Gemini y Google Routes se invocan cuando hay conexión. El frontend usa por defecto `https://rutas-gastos-route-service.onrender.com/api`; `VITE_ROUTE_API_URL` solo es necesario como override si cambia la URL del servicio.

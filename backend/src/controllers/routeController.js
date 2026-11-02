@@ -1,12 +1,32 @@
 import { z } from 'zod';
 import { interpretRoutePrompt } from '../services/aiRoutePlanner.js';
 import { computeGoogleRoutes } from '../services/googleRoutesService.js';
+import { HttpError } from '../utils/httpError.js';
 
-const schema = z.object({ prompt: z.string().trim().min(10).max(2000) });
+const routeSchema = z.object({
+  origin: z.string().trim().min(2).max(180),
+  destination: z.string().trim().min(2).max(180),
+  waypoints: z.array(z.string().trim().min(2).max(180)).max(10).default([]),
+});
+
+const schema = z.object({
+  prompt: z.string().trim().min(10).max(2000),
+  route: routeSchema.optional(),
+});
+
+function normalizeLocation(value) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
 export async function planRoute(req, res) {
-  const { prompt } = schema.parse(req.body);
-  const intent = await interpretRoutePrompt(prompt);
+  const { prompt, route } = schema.parse(req.body);
+  if (route) {
+    const locations = [route.origin, ...route.waypoints, route.destination].map(normalizeLocation);
+    if (new Set(locations).size !== locations.length) {
+      throw new HttpError(422, 'El origen, el destino y las paradas deben ser ubicaciones diferentes. Revisá el orden del recorrido.');
+    }
+  }
+  const intent = await interpretRoutePrompt(prompt, route);
   const routes = await computeGoogleRoutes(intent);
 
   const caveats = [

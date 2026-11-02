@@ -38,7 +38,7 @@ import http from './api/http.js';
 import { buildLocalBackup, clearLocalProfile, createLocalUser, getLocalProfile, restoreLocalBackup } from './data/localStore.js';
 import { money } from './utils.js';
 
-const EMPTY_TRIP = { name: '', origin: '', destination: '', startDate: '', incomeAmount: '0', incomeCurrency: 'ARS' };
+const EMPTY_TRIP = { name: '', origin: '', destination: '', waypoints: [], startDate: '', incomeAmount: '0', incomeCurrency: 'ARS' };
 
 const statusMeta = {
   PLANNED: { label: 'Planificado', color: 'info' },
@@ -215,12 +215,35 @@ export default function App() {
 
   useEffect(() => { if (user) loadTrips(); }, [user]);
 
+  function addWaypoint() {
+    setForm((previous) => previous.waypoints.length >= 10
+      ? previous
+      : { ...previous, waypoints: [...previous.waypoints, ''] });
+  }
+
+  function updateWaypoint(index, value) {
+    setForm((previous) => ({
+      ...previous,
+      waypoints: previous.waypoints.map((point, pointIndex) => pointIndex === index ? value : point),
+    }));
+  }
+
+  function removeWaypoint(index) {
+    setForm((previous) => ({
+      ...previous,
+      waypoints: previous.waypoints.filter((_, pointIndex) => pointIndex !== index),
+    }));
+  }
+
   async function createTrip(event) {
     event.preventDefault();
     setError('');
     try {
       const payload = {
         ...form,
+        origin: form.origin.trim(),
+        destination: form.destination.trim(),
+        waypoints: form.waypoints.map((point) => point.trim()).filter(Boolean),
         incomeAmount: Number(form.incomeAmount || 0),
         startDate: form.startDate ? new Date(`${form.startDate}T12:00:00`).toISOString() : null,
       };
@@ -517,11 +540,12 @@ export default function App() {
                       </Stack>
                       <ButtonBase onClick={() => setSelectedTripId(trip._id)} sx={{ width: '100%', display: 'block', textAlign: 'left', mt: 1.8, borderRadius: 2, '&:focus-visible': { outline: '3px solid rgba(89,103,232,.4)', outlineOffset: 3 } }}>
                         <Typography component="h3" sx={{ color: '#232B4A', fontSize: 15, fontWeight: 850 }}>{trip.name}</Typography>
-                        <Stack direction="row" alignItems="center" spacing={.7} sx={{ mt: .75, color: '#74809C', minWidth: 0 }}>
-                          <Typography noWrap sx={{ fontSize: 11, maxWidth: '45%' }}>{trip.origin}</Typography>
-                          <ArrowUpRight size={14} />
-                          <Typography noWrap sx={{ fontSize: 11, maxWidth: '45%' }}>{trip.destination}</Typography>
-                        </Stack>
+                        <Typography noWrap title={[trip.origin, ...(trip.waypoints || []), trip.destination].join(' → ')} sx={{ mt: .75, color: '#74809C', fontSize: 10.5, minWidth: 0 }}>
+                          {[trip.origin, ...(trip.waypoints || []), trip.destination].join('  →  ')}
+                        </Typography>
+                        {(trip.waypoints || []).length > 0 && (
+                          <Chip size="small" label={`${trip.waypoints.length} paradas intermedias`} sx={{ mt: .8, height: 23, color: '#5363C9', bgcolor: '#EEF0FF', fontSize: 9, fontWeight: 750 }} />
+                        )}
                         <Divider sx={{ my: 1.8, borderColor: '#EDF0F6' }} />
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Box>
@@ -561,7 +585,41 @@ export default function App() {
             <TextField fullWidth label="Nombre del viaje" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required slotProps={{ htmlInput: { minLength: 2, maxLength: 140 } }} placeholder="Ej.: Traslado de noviembre" />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.7 }}>
               <TextField fullWidth label="Origen" value={form.origin} onChange={(event) => setForm((prev) => ({ ...prev, origin: event.target.value }))} required placeholder="Ciudad o dirección" />
-              <TextField fullWidth label="Destino" value={form.destination} onChange={(event) => setForm((prev) => ({ ...prev, destination: event.target.value }))} required placeholder="Ciudad o dirección" />
+              <TextField fullWidth label="Destino final" value={form.destination} onChange={(event) => setForm((prev) => ({ ...prev, destination: event.target.value }))} required placeholder="Ciudad o dirección" />
+              <Box sx={{ gridColumn: '1 / -1', p: 1.6, border: '1px solid #E3E7F3', borderRadius: 3, bgcolor: '#FAFBFF' }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
+                  <Box>
+                    <Typography sx={{ color: '#303A60', fontSize: 11, fontWeight: 850 }}>Paradas intermedias</Typography>
+                    <Typography sx={{ color: '#7B849D', fontSize: 9.5 }}>Agregá las ciudades o provincias que forman parte del recorrido.</Typography>
+                  </Box>
+                  <Chip size="small" label={`${form.waypoints.length}/10`} color="primary" variant="outlined" />
+                </Stack>
+                <Stack spacing={1}>
+                  {form.waypoints.map((point, index) => (
+                    <Stack key={index} direction="row" alignItems="center" spacing={.8}>
+                      <Typography sx={{ width: 22, color: '#7580A0', fontSize: 10, fontWeight: 800, textAlign: 'center' }}>{index + 1}.</Typography>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label={`Parada ${index + 1}`}
+                        value={point}
+                        onChange={(event) => updateWaypoint(index, event.target.value)}
+                        placeholder="Ej.: Neuquén, Neuquén"
+                        slotProps={{ htmlInput: { maxLength: 180 } }}
+                      />
+                      <IconButton size="small" onClick={() => removeWaypoint(index)} aria-label={`Quitar parada ${index + 1}`} sx={{ color: '#BD5366', border: '1px solid #F0DDE3', borderRadius: 2 }}>
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Stack>
+                  ))}
+                </Stack>
+                <Button size="small" onClick={addWaypoint} disabled={form.waypoints.length >= 10} startIcon={<Plus size={15} />} sx={{ mt: 1.2 }}>
+                  Agregar parada
+                </Button>
+                <Typography sx={{ mt: .5, color: '#8790A8', fontSize: 9 }}>
+                  El orden ingresado se respeta al calcular la ruta. Podés cargar hasta 10 paradas.
+                </Typography>
+              </Box>
               <TextField fullWidth type="date" label="Fecha de inicio" value={form.startDate} onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))} slotProps={{ inputLabel: { shrink: true } }} />
               <TextField fullWidth type="number" label="Ganancia inicial" value={form.incomeAmount} onChange={(event) => setForm((prev) => ({ ...prev, incomeAmount: event.target.value }))} slotProps={{ htmlInput: { min: 0, step: .01 } }} />
               <TextField fullWidth select label="Moneda" value={form.incomeCurrency} onChange={(event) => setForm((prev) => ({ ...prev, incomeCurrency: event.target.value }))}>
